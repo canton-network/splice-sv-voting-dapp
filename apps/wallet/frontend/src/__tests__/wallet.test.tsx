@@ -318,7 +318,7 @@ describe('Wallet user can', () => {
         expect(acceptButtons.length).toBe(1);
 
         server.use(
-          http.post<PathParams, AllocateAmuletRequest>(
+          http.post<PathParams, AllocateAmuletV1Request>(
             `${walletUrl}/v0/allocations`,
             async ({ request }) => {
               const body = await request.json();
@@ -355,24 +355,17 @@ describe('Wallet user can', () => {
           resolve => (calledCreate = resolve)
         );
         server.use(
-          rest.get(
-            `${walletUrl}/v0/wallet/token-standard/allocation-requests`,
-            (_req, res, ctx) => {
-              return res(
-                ctx.json<ListAllocationRequestsResponse>({
-                  allocation_requests: allocationRequests.map(contract => {
-                    return { contract: mkContract(AllocationRequestV2, contract) };
-                  }),
-                })
-              );
-            }
-          ),
-          rest.get(`${walletUrl}/v0/allocations`, (_req, res, ctx) => {
-            return res(
-              ctx.json<ListAllocationsResponse>({
-                allocations: [],
-              })
-            );
+          http.get(`${walletUrl}/v0/wallet/token-standard/allocation-requests`, async () => {
+            return HttpResponse.json<ListAllocationRequestsResponse>({
+              allocation_requests: allocationRequests.map(contract => {
+                return { contract: mkContract(AllocationRequestV2, contract) };
+              }),
+            });
+          }),
+          http.get(`${walletUrl}/v0/allocations`, async () => {
+            return HttpResponse.json<ListAllocationsResponse>({
+              allocations: [],
+            });
           })
         );
 
@@ -401,20 +394,23 @@ describe('Wallet user can', () => {
         expect(acceptButtons.length).toBe(1);
 
         server.use(
-          rest.post(`${walletUrl}/v2/allocations`, async (req, res, ctx) => {
-            const body = await req.json();
-            calledCreate(body);
-            const response: AllocateAmuletV2Response = {
-              output: {
-                allocation_instruction_cid: 'alloc_instr_cid',
-                allocation_cid: 'alloc_cid',
-                dummy: {},
-              },
-              sender_change_cids: ['whatever'],
-              meta: {},
-            };
-            return res(ctx.json(response));
-          })
+          http.post<PathParams, AllocateAmuletV2Request>(
+            `${walletUrl}/v2/allocations`,
+            async ({ request }) => {
+              const body = await request.json();
+              calledCreate(body);
+              const response: AllocateAmuletV2Response = {
+                output: {
+                  allocation_instruction_cid: 'alloc_instr_cid',
+                  allocation_cid: 'alloc_cid',
+                  dummy: {},
+                },
+                sender_change_cids: ['whatever'],
+                meta: {},
+              };
+              return HttpResponse.json(response);
+            }
+          )
         );
 
         acceptButtons[0].click();
@@ -517,35 +513,26 @@ describe('Wallet user can', () => {
         const calledWithdrawArgs: string[] = [];
 
         server.use(
-          rest.get(
-            `${walletUrl}/v0/wallet/token-standard/allocation-requests`,
-            (_req, res, ctx) => {
-              return res(
-                ctx.json<ListAllocationRequestsResponse>({
-                  allocation_requests: allocationRequests.map(contract => {
-                    return { contract };
-                  }),
-                })
-              );
-            }
-          ),
-          rest.get(`${walletUrl}/v0/allocations`, (_req, res, ctx) => {
-            return res(
-              ctx.json<ListAllocationsResponse>({
-                allocations: allocations.map(contract => {
-                  return { contract };
-                }),
-              })
-            );
+          http.get(`${walletUrl}/v0/wallet/token-standard/allocation-requests`, async () => {
+            return HttpResponse.json<ListAllocationRequestsResponse>({
+              allocation_requests: allocationRequests.map(contract => {
+                return { contract };
+              }),
+            });
           }),
-          rest.post(`${walletUrl}/v2/allocations/:cid/withdraw`, (req, res, ctx) => {
-            calledWithdrawArgs.push(req.params.cid.toString());
-            return res(
-              ctx.json<AmuletAllocationV2WithdrawResult>({
-                authorizer_holding_cids: {},
-                meta: {},
-              })
-            );
+          http.get(`${walletUrl}/v0/allocations`, async () => {
+            return HttpResponse.json<ListAllocationsResponse>({
+              allocations: allocations.map(contract => {
+                return { contract };
+              }),
+            });
+          }),
+          http.post(`${walletUrl}/v2/allocations/:cid/withdraw`, async ({ params }) => {
+            calledWithdrawArgs.push(params!.cid!.toString());
+            return HttpResponse.json<AmuletAllocationV2WithdrawResult>({
+              authorizer_holding_cids: {},
+              meta: {},
+            });
           })
         );
 
@@ -584,34 +571,25 @@ describe('Wallet user can', () => {
         const calledRejectArgs: string[] = [];
 
         server.use(
-          rest.get(
-            `${walletUrl}/v0/wallet/token-standard/allocation-requests`,
-            (_req, res, ctx) => {
-              return res(
-                ctx.json<ListAllocationRequestsResponse>({
-                  allocation_requests: allocationRequests.map(contract => {
-                    return { contract };
-                  }),
-                })
-              );
-            }
-          ),
-          rest.get(`${walletUrl}/v0/allocations`, (_req, res, ctx) => {
-            return res(
-              ctx.json<ListAllocationsResponse>({
-                allocations: [],
-              })
-            );
+          http.get(`${walletUrl}/v0/wallet/token-standard/allocation-requests`, async () => {
+            return HttpResponse.json<ListAllocationRequestsResponse>({
+              allocation_requests: allocationRequests.map(contract => {
+                return { contract };
+              }),
+            });
           }),
-          rest.post(
+          http.get(`${walletUrl}/v0/allocations`, async () => {
+            return HttpResponse.json<ListAllocationsResponse>({
+              allocations: [],
+            });
+          }),
+          http.post(
             `${walletUrl}/v0/wallet/token-standard/allocation-requests/:cid/reject`,
-            (req, res, ctx) => {
-              calledRejectArgs.push(req.params.cid.toString());
-              return res(
-                ctx.json<ChoiceExecutionMetadata>({
-                  meta: {},
-                })
-              );
+            async ({ params }) => {
+              calledRejectArgs.push(params!.cid!.toString());
+              return HttpResponse.json<ChoiceExecutionMetadata>({
+                meta: {},
+              });
             }
           )
         );
