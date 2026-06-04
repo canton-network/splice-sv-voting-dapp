@@ -20,6 +20,8 @@ module Splice.TokenStandard.Utils (
   ensureNoAccountMeta,
   accountFromMeta,
   accountToMeta,
+  partiesFromMeta,
+  partiesToMeta,
 
   -- ** Requirements checking
   require,
@@ -137,6 +139,9 @@ module Splice.TokenStandard.Utils (
   upcast_v1_v2_AllocationView,
   tryDowncast_v2_v1_AllocationView,
 
+  extraExecutorsMetaKey,
+  executorsFromSettlementInfoV1,
+
   -- *** Choices
   allocationV2_withdrawDefaultImplUsingV1,
   allocationV2_cancelDefaultImpl,
@@ -185,10 +190,6 @@ module Splice.TokenStandard.Utils (
   allocationRequestV1_withdrawDefaultImpl,
 
   -- ** V2 defaults
-  allocationRequestV2_acceptDefaultExtraObservers,
-  allocationRequestV2_rejectDefaultExtraObservers,
-  allocationRequestV2_withdrawDefaultExtraObservers,
-
   allocationRequestV2_acceptDefaultImpl,
 
   -- ** V2 for dual version templates
@@ -235,10 +236,6 @@ module Splice.TokenStandard.Utils (
   transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl,
   transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl,
 
-  -- *** TransferInstruction extra observers
-  transferInstruction_acceptDefaultExtraObservers,
-  transferInstruction_rejectDefaultExtraObservers,
-  transferInstruction_withdrawDefaultExtraObservers,
 ) where
 
 
