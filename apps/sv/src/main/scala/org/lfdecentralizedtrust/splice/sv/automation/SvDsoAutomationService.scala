@@ -32,7 +32,7 @@ import org.lfdecentralizedtrust.splice.config.{
 }
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
@@ -114,6 +114,22 @@ class SvDsoAutomationService(
     retryConnectionOnInitialFailure = true,
   )
 
+  private val bftScanConnectionF: Future[BftScanConnection] =
+    BftScanConnection.peerScanConnection(
+      () =>
+        BftScanConnection.Bft.getPeerScansFromDsoRules(
+          dsoStore,
+          dsoStore.key.svParty,
+        )(tc, ec),
+      ledgerClient,
+      ScanAppClientConfig.DefaultScansRefreshInterval,
+      ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
+      upgradesConfig,
+      clock,
+      retryProvider,
+      loggerFactory,
+    )(ec, tc, mat, httpClient, templateJsonDecoder)
+
   override protected def closeAsync(): Seq[AsyncOrSyncCloseable] =
     super.closeAsync() :+ AsyncCloseable(
       "scan-connection",
@@ -122,6 +138,13 @@ class SvDsoAutomationService(
         case scala.util.Failure(_) => scala.util.Success(())
       },
       NonNegativeDuration.tryFromDuration(timeouts.shutdownNetwork.duration),
+    ) :+ AsyncCloseable(
+      "bft-scan-connection",
+      bftScanConnectionF.transform {
+        case scala.util.Success(c) => scala.util.Try(c.close())
+        case scala.util.Failure(_) => scala.util.Success(())
+      },
+      timeouts.shutdownNetwork,
     )
 
   private val packageVettingService = new PackageVettingLookupService(
@@ -150,6 +173,7 @@ class SvDsoAutomationService(
       packageVersionSupport,
       packageVettingService,
       scanConnectionF,
+      bftScanConnectionF,
     )
 
   // required for triggers that must run in sim time as well
@@ -392,6 +416,7 @@ class SvDsoAutomationService(
         dsoStore,
         connection(SpliceLedgerConnectionPriority.Medium),
         scanConnectionF,
+        bftScanConnectionF,
       )
     )
 
@@ -401,6 +426,7 @@ class SvDsoAutomationService(
         dsoStore,
         connection(SpliceLedgerConnectionPriority.Medium),
         scanConnectionF,
+        bftScanConnectionF,
       )
     )
 
