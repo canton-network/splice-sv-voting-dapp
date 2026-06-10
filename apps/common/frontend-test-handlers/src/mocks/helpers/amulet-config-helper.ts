@@ -26,6 +26,8 @@ export function mkVoteRequest(action: ActionRequiringConfirmation): Contract<Vot
           body: 'I accept, as I requested the vote.',
         },
         optCastAt: null,
+        castBy: null,
+        castByRole: null,
       }),
       voteBefore: '2098-09-11T10:27:52.300591Z',
       requester: 'Digital-Asset-2',

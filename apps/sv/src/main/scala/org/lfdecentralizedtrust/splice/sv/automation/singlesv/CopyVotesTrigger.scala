@@ -118,8 +118,12 @@ class CopyVotesTrigger(
                       thisSvParty,
                       sourceVote.accept,
                       reason,
-                      Optional.empty(),
+                      Optional.empty(), // optCastAt
+                      Optional.empty(), // castBy: server-set attribution
+                      Optional.empty(), // castByRole: server-set attribution
                     ),
+                    Optional.empty(), // bindingCid: operator path
+                    Optional.empty(), // castBy: operator path
                   )
                 )
                 _ <- connection
