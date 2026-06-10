@@ -923,6 +923,7 @@ object SvApp {
                   reason,
                   java.util.Optional.of(decodedExpiration),
                   effectiveTime,
+                  java.util.Optional.empty(), // bindingCid: operator path
                 )
                 cmd = dsoRules.exercise(_.exerciseDsoRules_RequestVote(request))
                 res <- dsoStoreWithIngestion
@@ -1032,7 +1033,11 @@ object SvApp {
                     isAccepted,
                     reason,
                     Optional.empty(), // optCastAt
+                    Optional.empty(), // castBy: server-set attribution
+                    Optional.empty(), // castByRole: server-set attribution
                   ),
+                  Optional.empty(), // bindingCid: operator path
+                  Optional.empty(), // castBy: operator path
                 )
               )
               res <- dsoStoreWithIngestion
