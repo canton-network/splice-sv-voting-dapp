@@ -1642,16 +1642,30 @@ object SvDsoStore {
       // carry no indexed columns: callers list them via `listContracts` and
       // filter in-app, which is adequate for the small, low-churn populations
       // (one binding per SV, one singleton registry).
-      mkFilter(splice.dso.governancevoter.SvGovernanceVoter.COMPANION)(co =>
-        co.payload.dso == dso
+      //
+      // Both templates were introduced in splice-dso-governance 0.1.27, so the
+      // ACS ingestion filter is version-guarded: until that DAR is vetted the
+      // templates are omitted from GetActiveContracts, which would otherwise
+      // fail with NO_TEMPLATES_FOR_PACKAGE_NAME_AND_QUALIFIED_NAME on a
+      // participant that only has an older dso-governance version vetted (e.g.
+      // a minimum-version bootstrap). Contracts are still ingested via the
+      // wildcard updates stream once vetting catches up.
+      mkFilter(splice.dso.governancevoter.SvGovernanceVoter.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsGovernanceVoter(Seq(dsoParty), now)(tc)
+        },
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
           svParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.sv)),
         )
       },
-      mkFilter(splice.dso.configclassification.ConfigFieldClassifications.COMPANION)(co =>
-        co.payload.dso == dso
+      mkFilter(splice.dso.configclassification.ConfigFieldClassifications.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsGovernanceVoter(Seq(dsoParty), now)(tc)
+        },
       ) { contract =>
         DsoAcsStoreRowData(
           contract
