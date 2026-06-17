@@ -132,21 +132,13 @@ data AnsEntryContext_ActionRequiringConfirmation
     -- ^ Automated action to reject initial payment of an ans entry.
   deriving (Eq, Show)
 
--- | Phase 1 governance-voter action taxonomy.
+-- | Actions that may use the governance-voter path on `DsoRules_RequestVote` /
+-- `DsoRules_CastVote` (when `bindingCid` / `castBy` are set). Phase 1 does
+-- not block the operator path for these actions; it only scopes the optional
+-- governance-voter path.
 --
--- This classifies which actions *may* be requested and cast via the
--- governance-voter path (`bindingCid` set on `DsoRules_RequestVote` /
--- `DsoRules_CastVote`). In Phase 1 the operator path remains valid for all
--- actions, so this taxonomy does not restrict status-quo voting behavior;
--- it only scopes the new, optional governance-voter path.
---
--- The SRARC_* branch is an explicit allowlist with no wildcard fall-through:
--- adding a new SRARC_* constructor must be accompanied by an explicit decision
--- here so that a new SV-side action cannot silently default to a particular
--- eligibility. The CRARC_* branch retains a wildcard because AmuletRules
--- actions are owned by a separate codebase area; their default of
--- non-eligibility is preserved as-is, and any future change in policy for
--- AmuletRules actions should be driven from that area.
+-- SRARC_*: explicit allowlist (no wildcard). CRARC_*: wildcard default
+-- false; only `CRARC_SetConfig` is eligible.
 isGovernanceVoterAction : ActionRequiringConfirmation -> Bool
 isGovernanceVoterAction action = case action of
   ARC_DsoRules with dsoAction -> case dsoAction of
@@ -803,35 +795,23 @@ template DsoRules with
 
     -- TODO(#9317): rate limit inidiviual SVs wrt requesting votes
     --
-    -- Open a vote request. The path the choice takes depends on the optional
-    -- binding.
-    --
-    -- Operator path (bindingCid = None): status-quo behavior, valid for
-    -- all actions. The requester must be an SV; the initial vote is recorded
-    -- against the SV's slot with VCR_Operator.
-    --
-    -- Governance-voter path (bindingCid = Some _): for governance-voter
-    -- eligible actions only. The requester is the governance-voter party
-    -- authenticated via the binding (the binding's governanceVoter); the
-    -- represented SV is taken from the binding and the initial vote is
-    -- recorded against that SV's slot with VCR_GovernanceVoter.
-    --
-    -- bindingCid is Optional and appended at the end so existing on-ledger
-    -- references and exercise records remain upgradable.
+    -- Open a vote request. With `bindingCid = None`, the requester must be an
+    -- SV and the initial vote is recorded for that SV with VCR_Operator. With
+    -- `bindingCid = Some _`, the requester must be the binding's
+    -- governanceVoter, the action must be governance-voter eligible, and the
+    -- initial vote is recorded for the binding's represented SV with
+    -- VCR_GovernanceVoter. Phase 1 does not require governance-eligible actions
+    -- to use the governance-voter path.
     nonconsuming choice DsoRules_RequestVote : DsoRules_RequestVoteResult
       with
         requester : Party
-          -- ^ The party opening the request: the represented SV on the
-          -- operator path, or the governance voter authenticated via
-          -- `bindingCid` on the governance-voter path.
+          -- ^ SV party (operator path) or binding governanceVoter (governance path).
         action : ActionRequiringConfirmation
         reason : Reason
         voteRequestTimeout : Optional RelTime
         targetEffectiveAt : Optional Time
         bindingCid : Optional (ContractId SvGovernanceVoter)
-          -- ^ Present iff using the governance-voter path. `requester` must
-          -- be the governance voter named on the binding, and `action` must
-          -- be governance-voter eligible.
+          -- ^ Set iff using the governance-voter path.
       controller requester
       do
         requireWellformedReason config reason
@@ -882,23 +862,12 @@ template DsoRules with
         return DsoRules_RequestVoteResult with ..
 
 
-    -- Cast or update a vote on a vote request. The path depends on the
-    -- optional binding.
-    --
-    -- Operator path (bindingCid = None, castBy = None): status-quo
-    -- behavior, valid for all actions. Controller is vote.sv; the
-    -- recorded vote is attributed as VCR_Operator with castBy = vote.sv.
-    --
-    -- Governance-voter path (bindingCid = Some _, castBy = Some _):
-    -- for governance-voter eligible actions only. Controller is the
-    -- castBy party; the binding is checked-fetched via
-    -- ForOwner with owner = castBy; the recorded vote's SV is taken
-    -- from the binding (so it cannot drift from vote.sv); the vote is
-    -- attributed as VCR_GovernanceVoter with castBy set to that party.
-    --
-    -- `bindingCid` and `castBy` are Optional and appended at the end so
-    -- existing on-ledger references remain upgradable. They must be both
-    -- present or both absent.
+    -- Cast or update a vote. With `bindingCid = None` and `castBy = None`,
+    -- the controller is `vote.sv` and the cast is attributed as VCR_Operator.
+    -- With both set, the controller is `castBy`, the binding is checked, the
+    -- action must be governance-voter eligible, and the cast is attributed as
+    -- VCR_GovernanceVoter for the binding's represented SV. Phase 1 does not
+    -- require governance-eligible actions to use the governance-voter path.
     --
     -- Note that this choice can be used to both cast the initial vote, and update a vote.
     nonconsuming choice DsoRules_CastVote : DsoRules_CastVoteResult
@@ -906,14 +875,8 @@ template DsoRules with
         requestCid : ContractId VoteRequest
         vote : Vote
         bindingCid : Optional (ContractId SvGovernanceVoter)
-          -- ^ Present iff using the governance-voter path. `castBy` must
-          -- be the governance voter named on the binding, the request's
-          -- action must be governance-voter eligible, and the recorded
-          -- vote's SV must match the binding's represented SV.
         castBy : Optional Party
-          -- ^ The governance-voter party signing the cast on the
-          -- governance-voter path; serves as the controller. Must be
-          -- present iff `bindingCid` is.
+          -- ^ Must be present iff `bindingCid` is set; then controls the choice.
       controller fromOptional vote.sv castBy
       do
         -- validate vote parameters
@@ -934,9 +897,7 @@ template DsoRules with
         voterName <- case Map.lookup effectiveVoteSv svs of
           None -> fail "Voter is not an SV"
           Some info -> pure info.name
-        -- Validate the request before archiving it: the governance-voter
-        -- path is only valid for governance-voter eligible actions.
-        request <- fetchChecked (ForDso with dso) requestCid
+        request <- fetchAndArchive (ForDso with dso) requestCid
         case bindingCid of
           None -> pure ()
           Some _ ->
@@ -950,10 +911,6 @@ template DsoRules with
         enforceCooldown ("voteCooldownTime for " <> partyToText effectiveVoteSv) (getVoteCooldownTime config) $ do
           pastVote <- Map.lookup voterName request.votes
           pastVote.optCastAt
-        -- Safe: `request` was fetched and ownership-checked above, so a
-        -- bare archive is sound; potentiallyUnsafeArchive is used here only
-        -- to satisfy the static warts check that forbids naked archive.
-        potentiallyUnsafeArchive requestCid
         -- store vote
         now <- getTime
         let recordedVote = vote with
@@ -1185,14 +1142,8 @@ template DsoRules with
     -- Governance-voter binding management
     --------------------------------------
 
-    -- Replace an SV's governance-voter binding with a new one. The current
-    -- binding is archived (so there is exactly one fresh binding per
-    -- represented SV after a successful rotation), and the new binding is
-    -- created with the DSO party as signatory. This choice is the only path
-    -- that mutates SvGovernanceVoter post-onboarding; invoking it requires
-    -- running the standard SRARC_RotateGovernanceVoter action through a
-    -- confirmation quorum, so a single SV operator cannot unilaterally rotate
-    -- their own binding.
+    -- Replace an SV's governance-voter binding. Invoked via
+    -- SRARC_RotateGovernanceVoter (confirmation quorum).
     nonconsuming choice DsoRules_RotateGovernanceVoter : DsoRules_RotateGovernanceVoterResult
       with
         sv : Party
@@ -2129,9 +2080,7 @@ createPerSvPartyContracts dso newSvParty newSvName synchronizerNodes amuletPrice
     svName = newSvName
     state = NodeState with
       synchronizerNodes
-  -- Onboarding default: the newly added SV is its own governance voter. Any
-  -- subsequent change must run through SRARC_RotateGovernanceVoter so the
-  -- single-binding-per-SV property is preserved.
+  -- Self-binding at onboarding; later changes via SRARC_RotateGovernanceVoter.
   void $ create SvGovernanceVoter with
     dso
     sv = newSvParty
