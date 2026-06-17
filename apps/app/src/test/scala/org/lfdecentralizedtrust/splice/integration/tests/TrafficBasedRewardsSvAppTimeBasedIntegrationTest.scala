@@ -234,8 +234,12 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         val round = oldestOpenRound
         doTransfer(bobParty)
         // Need to advance by two rounds, see note below about last_archived_round
-        advanceRoundsToNextRoundOpening
-        advanceRoundsToNextRoundOpening
+        // Note: we can't use advanceRoundsToNextRoundOpening here, as it blocks
+        // on summarizing and issuing round to complete, and here the
+        // summarizing round will block until the sv2 provides the round totals
+        // via bft read.
+        advanceTimeAndWaitForRoundOpening
+        advanceTimeAndWaitForRoundOpening
 
         val (calculateRewardsCid, rootHash) =
           clue(
@@ -267,6 +271,10 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
               .listConfirmations(startProcessingAction)
               .futureValue should have size 2
           }
+          sv1Backend.appState.dsoStore
+            .listOldestSummarizingMiningRounds()
+            .futureValue
+            .map(_.payload.round.number) should contain(round)
         }
 
         // This is trying to simulate AppActivityRecordMetaT's userVersion bump
