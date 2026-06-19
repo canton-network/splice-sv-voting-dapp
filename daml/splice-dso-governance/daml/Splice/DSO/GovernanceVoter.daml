@@ -1,0 +1,25 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.DSO.GovernanceVoter where
+
+import Splice.Types
+import Splice.Util
+
+-- | Binding from a represented SV to the party that may cast its vote on
+-- governance-voter eligible actions. Created as a self-binding at SV
+-- onboarding; changed only via DsoRules rotation. The DSO party is the sole
+-- signatory and sole stakeholder (see design doc for visibility rationale).
+template SvGovernanceVoter
+  with
+    dso : Party
+    sv : Party
+    governanceVoter : Party
+  where
+    signatory dso
+
+instance HasCheckedFetch SvGovernanceVoter ForDso where
+  contractGroupId SvGovernanceVoter {..} = ForDso with dso
+
+instance HasCheckedFetch SvGovernanceVoter ForOwner where
+  contractGroupId SvGovernanceVoter {..} = ForOwner with dso; owner = governanceVoter
