@@ -1,0 +1,169 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.TestConfigClassification where
+
+import DA.Assert
+import DA.Foldable (forA_)
+import qualified DA.Map as Map
+import Daml.Script
+
+import Splice.DsoRules
+import Splice.DSO.ConfigClassification
+
+import Splice.Scripts.DsoTestUtils
+
+-- | Tests the default field-classification map and the effective-classification
+-- lookup, without any on-ledger state.
+testConfigFieldClassificationDefaults : Script ()
+testConfigFieldClassificationDefaults = do
+  -- Spot-check the per-category defaults.
+  defaultConfigFieldClassification "DsoRulesConfig.actionConfirmationTimeout" === CFC_Operational
+  defaultConfigFieldClassification "DsoRulesConfig.voteCooldownTime" === CFC_Governance
+  defaultConfigFieldClassification "DsoRulesConfig.maxTextLength" === CFC_Fixed
+  defaultConfigFieldClassification "AmuletConfig.transferConfig" === CFC_Governance
+  defaultConfigFieldClassification "AmuletConfig.packageConfig" === CFC_Operational
+
+  -- Unknown field paths are not classified.
+  isKnownConfigField "DsoRulesConfig.someFutureField" === False
+
+  -- All known fields are listed exactly once and resolvable.
+  forA_ (dsoRulesConfigFieldDefaults <> amuletConfigFieldDefaults) $ \(fieldPath, classification) -> do
+    isKnownConfigField fieldPath === True
+    defaultConfigFieldClassification fieldPath === classification
+
+  -- Overrides apply uniformly, including for fields that default to fixed.
+  let overrides = Map.fromList
+        [ ("DsoRulesConfig.actionConfirmationTimeout", CFC_Governance)
+        , ("DsoRulesConfig.maxTextLength", CFC_Governance)
+        ]
+  effectiveConfigFieldClassification overrides "DsoRulesConfig.actionConfirmationTimeout" === CFC_Governance
+  effectiveConfigFieldClassification overrides "DsoRulesConfig.maxTextLength" === CFC_Governance
+  effectiveConfigFieldClassification overrides "DsoRulesConfig.voteCooldownTime" === CFC_Governance
+  pure ()
+
+-- | Tests the SRARC_SetConfigFieldClassification vote flow: reclassifying a
+-- field creates the overrides registry, reverting to the default removes the
+-- entry, and invalid reclassifications are rejected.
+testSetConfigFieldClassification : Script ()
+testSetConfigFieldClassification = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
+
+  -- No registry exists until the first reclassification vote.
+  [] <- query @ConfigFieldClassifications dso
+
+  -- Reclassify an operational-by-default field to governance through the
+  -- standard vote flow.
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $ ARC_DsoRules with
+    dsoAction = SRARC_SetConfigFieldClassification DsoRules_SetConfigFieldClassification with
+      fieldPath = "DsoRulesConfig.actionConfirmationTimeout"
+      newClassification = CFC_Governance
+      currentClassificationsCid = None
+  [(classificationsCid, classifications)] <- query @ConfigFieldClassifications dso
+  classifications.overrides === Map.fromList [("DsoRulesConfig.actionConfirmationTimeout", CFC_Governance)]
+  effectiveConfigFieldClassification classifications.overrides "DsoRulesConfig.actionConfirmationTimeout"
+    === CFC_Governance
+
+  -- Reverting the field to its default classification removes the override
+  -- entry, leaving an empty registry rather than a redundant entry.
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $ ARC_DsoRules with
+    dsoAction = SRARC_SetConfigFieldClassification DsoRules_SetConfigFieldClassification with
+      fieldPath = "DsoRulesConfig.actionConfirmationTimeout"
+      newClassification = CFC_Operational
+      currentClassificationsCid = Some classificationsCid
+  None <- queryContractId dso classificationsCid
+  [(classificationsCid2, classifications2)] <- query @ConfigFieldClassifications dso
+  classifications2.overrides === Map.empty
+
+  -- The choice body's requires, probed directly as the DSO party (the choice
+  -- is only reachable via the vote flow in production).
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  -- Unknown fields are rejected so typos cannot create dangling entries.
+  submitMustFail dso $ exerciseCmd dsoRulesCid DsoRules_SetConfigFieldClassification with
+    fieldPath = "DsoRulesConfig.noSuchField"
+    newClassification = CFC_Operational
+    currentClassificationsCid = Some classificationsCid2
+
+  -- Fields that default to fixed are reclassifiable through the vote flow.
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $ ARC_DsoRules with
+    dsoAction = SRARC_SetConfigFieldClassification DsoRules_SetConfigFieldClassification with
+      fieldPath = "DsoRulesConfig.maxTextLength"
+      newClassification = CFC_Governance
+      currentClassificationsCid = Some classificationsCid2
+  None <- queryContractId dso classificationsCid2
+  [(classificationsCid3, classifications3)] <- query @ConfigFieldClassifications dso
+  classifications3.overrides === Map.fromList [("DsoRulesConfig.maxTextLength", CFC_Governance)]
+  effectiveConfigFieldClassification classifications3.overrides "DsoRulesConfig.maxTextLength"
+    === CFC_Governance
+
+  -- A field can be reclassified to fixed.
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $ ARC_DsoRules with
+    dsoAction = SRARC_SetConfigFieldClassification DsoRules_SetConfigFieldClassification with
+      fieldPath = "DsoRulesConfig.voteCooldownTime"
+      newClassification = CFC_Fixed
+      currentClassificationsCid = Some classificationsCid3
+  None <- queryContractId dso classificationsCid3
+  [(classificationsCid4, classifications4)] <- query @ConfigFieldClassifications dso
+  classifications4.overrides === Map.fromList
+    [ ("DsoRulesConfig.maxTextLength", CFC_Governance)
+    , ("DsoRulesConfig.voteCooldownTime", CFC_Fixed)
+    ]
+  effectiveConfigFieldClassification classifications4.overrides "DsoRulesConfig.voteCooldownTime"
+    === CFC_Fixed
+
+  -- Reverting to the default classification removes the override entry.
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $ ARC_DsoRules with
+    dsoAction = SRARC_SetConfigFieldClassification DsoRules_SetConfigFieldClassification with
+      fieldPath = "DsoRulesConfig.maxTextLength"
+      newClassification = CFC_Fixed
+      currentClassificationsCid = Some classificationsCid4
+  None <- queryContractId dso classificationsCid4
+  [(classificationsCid5, classifications5)] <- query @ConfigFieldClassifications dso
+  classifications5.overrides === Map.fromList [("DsoRulesConfig.voteCooldownTime", CFC_Fixed)]
+
+  -- No-op reclassifications are rejected.
+  submitMustFail dso $ exerciseCmd dsoRulesCid DsoRules_SetConfigFieldClassification with
+    fieldPath = "DsoRulesConfig.voteCooldownTime"
+    newClassification = CFC_Fixed
+    currentClassificationsCid = Some classificationsCid5
+
+  -- The registry is signed by the DSO party and cannot be bare-created by an SV.
+  submitMustFail sv1 $ createCmd ConfigFieldClassifications with
+    dso
+    overrides = Map.empty
+  pure ()
+
+-- | Tests that the reclassification action is eligible for the
+-- governance-voter path: a reclassification vote can be opened on the
+-- governance-voter path and is recorded with governance-voter attribution.
+testSetConfigFieldClassificationViaGovernanceVoterPath : Script ()
+testSetConfigFieldClassificationViaGovernanceVoterPath = do
+  (_app, dso, (sv1, _sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  sv1Binding <- ensureSelfBinding dso sv1
+
+  isGovernanceVoterAction (ARC_DsoRules with
+    dsoAction = SRARC_SetConfigFieldClassification DsoRules_SetConfigFieldClassification with
+      fieldPath = "DsoRulesConfig.voteCooldownTime"
+      newClassification = CFC_Operational
+      currentClassificationsCid = None) === True
+
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv1
+    bindingCid = Some sv1Binding
+    action = ARC_DsoRules with
+      dsoAction = SRARC_SetConfigFieldClassification DsoRules_SetConfigFieldClassification with
+        fieldPath = "DsoRulesConfig.voteCooldownTime"
+        newClassification = CFC_Operational
+        currentClassificationsCid = None
+    reason = Reason with url = ""; body = "reclassify via governance path"
+    targetEffectiveAt = None
+    voteRequestTimeout = None
+  Some request <- queryContractId dso result.voteRequest
+  case Map.lookup "sv1" request.votes of
+    None -> fail "requester vote missing"
+    Some vote -> do
+      vote.castBy === Some sv1
+      vote.castByRole === Some VCR_GovernanceVoter
+  pure ()

@@ -1,0 +1,115 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Field-level classification of DSO governance configuration.
+--
+-- Every individually votable configuration field of `DsoRulesConfig` and
+-- `AmuletConfig` is classified as operational, governance, or fixed. Defaults
+-- are defined in this module; deviations live in the on-ledger
+-- `ConfigFieldClassifications` registry, updated exclusively through the
+-- `SRARC_SetConfigFieldClassification` vote action.
+--
+-- Fields are identified by stable `Text` paths (e.g.
+-- `"DsoRulesConfig.voteCooldownTime"`, `"AmuletConfig.transferConfig"`) so that the
+-- classification does not need a new Daml type per config record. Every votable
+-- config field must appear in the defaults map below; a new field is added here
+-- in the same change that introduces it.
+module Splice.DSO.ConfigClassification where
+
+import DA.Optional (fromOptional, isSome)
+import qualified DA.Map as Map
+import qualified DA.TextMap as TextMap
+
+import Splice.Types
+import Splice.Util
+
+-- | Classification of a single configuration field.
+data ConfigFieldClassification
+  = CFC_Operational
+    -- ^ Node-operations parameter: tuning it affects how SV nodes run the
+    -- network but does not change economic or governance policy.
+  | CFC_Governance
+    -- ^ Governance parameter: changing it is a policy decision of the SVs.
+  | CFC_Fixed
+    -- ^ Config field whose value must not change through ordinary config votes;
+    -- the classification itself is still mutable via reclassification vote.
+  deriving (Eq, Show)
+
+-- | Default classification for the known `DsoRulesConfig` fields, keyed by
+-- `"DsoRulesConfig.<fieldName>"`.
+--
+-- The defaults below are a concrete starting point for maintainer and CIP
+-- review, not a final statement of governance policy.
+dsoRulesConfigFieldDefaults : [(Text, ConfigFieldClassification)]
+dsoRulesConfigFieldDefaults =
+  [ ("DsoRulesConfig.numUnclaimedRewardsThreshold", CFC_Operational)
+  , ("DsoRulesConfig.numMemberTrafficContractsThreshold", CFC_Operational)
+  , ("DsoRulesConfig.actionConfirmationTimeout", CFC_Operational)
+  , ("DsoRulesConfig.svOnboardingRequestTimeout", CFC_Operational)
+  , ("DsoRulesConfig.svOnboardingConfirmedTimeout", CFC_Operational)
+  , ("DsoRulesConfig.voteRequestTimeout", CFC_Governance)
+  , ("DsoRulesConfig.dsoDelegateInactiveTimeout", CFC_Fixed) -- deprecated field
+  , ("DsoRulesConfig.synchronizerNodeConfigLimits", CFC_Operational)
+  , ("DsoRulesConfig.maxTextLength", CFC_Fixed) -- ledger safety invariant
+  , ("DsoRulesConfig.decentralizedSynchronizer", CFC_Operational)
+  , ("DsoRulesConfig.nextScheduledSynchronizerUpgrade", CFC_Operational)
+  , ("DsoRulesConfig.voteCooldownTime", CFC_Governance)
+  , ("DsoRulesConfig.nextScheduledLogicalSynchronizerUpgrade", CFC_Operational)
+  ]
+
+-- | Default classification for the known `AmuletConfig` fields, keyed by
+-- `"AmuletConfig.<fieldName>"`. Economic parameters are governance; synchronizer
+-- and release-management parameters are operational.
+amuletConfigFieldDefaults : [(Text, ConfigFieldClassification)]
+amuletConfigFieldDefaults =
+  [ ("AmuletConfig.transferConfig", CFC_Governance)
+  , ("AmuletConfig.issuanceCurve", CFC_Governance)
+  , ("AmuletConfig.decentralizedSynchronizer", CFC_Operational)
+  , ("AmuletConfig.tickDuration", CFC_Governance)
+  , ("AmuletConfig.packageConfig", CFC_Operational)
+  , ("AmuletConfig.transferPreapprovalFee", CFC_Governance)
+  , ("AmuletConfig.featuredAppActivityMarkerAmount", CFC_Governance)
+  , ("AmuletConfig.optDevelopmentFundManager", CFC_Governance)
+  , ("AmuletConfig.externalPartyConfigStateTickDuration", CFC_Operational)
+  , ("AmuletConfig.rewardConfig", CFC_Governance)
+  ]
+
+-- | All known classifiable field paths with their default classification.
+configFieldDefaults : TextMap.TextMap ConfigFieldClassification
+configFieldDefaults =
+  TextMap.fromList (dsoRulesConfigFieldDefaults <> amuletConfigFieldDefaults)
+
+-- | Whether a field path denotes a known configuration field. Reclassification
+-- votes are restricted to known fields so that a typo cannot create a
+-- dangling classification entry.
+isKnownConfigField : Text -> Bool
+isKnownConfigField fieldPath = isSome (TextMap.lookup fieldPath configFieldDefaults)
+
+-- | The default classification of a known field path.
+defaultConfigFieldClassification : Text -> ConfigFieldClassification
+defaultConfigFieldClassification fieldPath =
+  case TextMap.lookup fieldPath configFieldDefaults of
+    None -> error ("Unknown config field path: " <> fieldPath)
+    Some classification -> classification
+
+-- | The effective classification of a field given the on-ledger overrides.
+effectiveConfigFieldClassification
+  : Map.Map Text ConfigFieldClassification -> Text -> ConfigFieldClassification
+effectiveConfigFieldClassification overrides fieldPath =
+  let def = defaultConfigFieldClassification fieldPath
+  in fromOptional def (Map.lookup fieldPath overrides)
+
+-- | Singleton registry, signed by the DSO party, of classification overrides relative to
+-- the defaults above. The contract is created and updated exclusively through
+-- the `SRARC_SetConfigFieldClassification` action on `DsoRules`, which runs
+-- through the standard vote flow; absence of this contract (or of an entry
+-- for a field) means the default classification applies.
+template ConfigFieldClassifications
+  with
+    dso : Party
+    overrides : Map.Map Text ConfigFieldClassification
+  where
+    signatory dso
+
+instance HasCheckedFetch ConfigFieldClassifications ForDso where
+  contractGroupId ConfigFieldClassifications {..} = ForDso with dso

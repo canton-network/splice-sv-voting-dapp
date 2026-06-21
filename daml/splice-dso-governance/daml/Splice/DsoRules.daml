@@ -33,6 +33,7 @@ import Splice.Ans
 import Splice.SvOnboarding
 import Splice.DSO.AmuletPrice
 import Splice.DSO.DecentralizedSynchronizer
+import Splice.DSO.ConfigClassification
 import Splice.DSO.GovernanceVoter
 import Splice.DSO.SvState
 import Splice.Schedule
@@ -123,6 +124,9 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Replace an SV's governance-voter binding with a new one. Operational
     -- action; runs through the confirmation-quorum flow rather than the
     -- governance-voter vote path.
+  | SRARC_SetConfigFieldClassification DsoRules_SetConfigFieldClassification
+    -- ^ Voted action to reclassify a configuration field as operational or
+    -- governance, relative to the defaults in `Splice.DSO.ConfigClassification`.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -154,6 +158,9 @@ isGovernanceVoterAction action = case action of
     SRARC_CreateTransferCommandCounter _ -> False
     SRARC_CreateBootstrapExternalPartyConfigStateInstruction _ -> False
     SRARC_RotateGovernanceVoter _ -> False
+    -- Changing a field's classification is itself a governance decision, so
+    -- the reclassification action is eligible for the governance-voter path.
+    SRARC_SetConfigFieldClassification _ -> True
   ARC_AmuletRules with amuletRulesAction -> case amuletRulesAction of
     CRARC_SetConfig _ -> True
     _ -> False
@@ -227,6 +234,9 @@ data DsoRules_CastVoteResult = DsoRules_CastVoteResult with
 
 data DsoRules_RotateGovernanceVoterResult = DsoRules_RotateGovernanceVoterResult with
     bindingCid : ContractId SvGovernanceVoter
+
+data DsoRules_SetConfigFieldClassificationResult = DsoRules_SetConfigFieldClassificationResult with
+    classificationsCid : ContractId ConfigFieldClassifications
 
 data DsoRules_UpdateAmuletPriceVoteResult = DsoRules_UpdateAmuletPriceVoteResult with
     amuletPriceVote : ContractId AmuletPriceVote
@@ -1163,6 +1173,44 @@ template DsoRules with
         return DsoRules_RotateGovernanceVoterResult with ..
 
 
+    -- Config field classification
+    ------------------------------
+
+    -- Reclassify a configuration field as operational or governance, relative
+    -- to the defaults in `Splice.DSO.ConfigClassification`. The overrides
+    -- registry is maintained as a singleton `ConfigFieldClassifications`
+    -- contract: the caller passes the current registry (or `None` if it has
+    -- not been created yet), and the choice replaces it with an updated one.
+    -- Reverting a field to its default removes the override entry, so the
+    -- registry only carries deviations from the defaults.
+    --
+    -- This choice is invoked via the SRARC_SetConfigFieldClassification action
+    -- through the standard vote flow.
+    nonconsuming choice DsoRules_SetConfigFieldClassification : DsoRules_SetConfigFieldClassificationResult
+      with
+        fieldPath : Text
+        newClassification : ConfigFieldClassification
+        currentClassificationsCid : Optional (ContractId ConfigFieldClassifications)
+      controller dso
+      do
+        require "Field is a known configuration field" (isKnownConfigField fieldPath)
+        overrides <- case currentClassificationsCid of
+          None -> pure Map.empty
+          Some cid -> do
+            current <- fetchAndArchive (ForDso with dso) cid
+            pure current.overrides
+        require "Reclassification changes the effective classification"
+          (effectiveConfigFieldClassification overrides fieldPath /= newClassification)
+        let newOverrides =
+              if defaultConfigFieldClassification fieldPath == newClassification
+                then Map.delete fieldPath overrides
+                else Map.insert fieldPath newClassification overrides
+        classificationsCid <- create ConfigFieldClassifications with
+          dso
+          overrides = newOverrides
+        return DsoRules_SetConfigFieldClassificationResult with ..
+
+
     -- Validator onboarding
     -----------------------
 
@@ -1926,6 +1974,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_RotateGovernanceVoter choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_SetConfigFieldClassification choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
