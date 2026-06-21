@@ -28,7 +28,7 @@ data ConfigFieldClassification
     -- ^ Node-operations parameter: tuning it affects how SV nodes run the
     -- network but does not change economic or governance policy.
   | CFC_Governance
-    -- ^ Governance parameter: changing it is a policy decision of the DSO.
+    -- ^ Governance parameter: changing it is a policy decision of the SVs.
     -- This is the default for fields without an explicit classification.
   | CFC_Fixed
     -- ^ Not changeable through the classification vote process; the
