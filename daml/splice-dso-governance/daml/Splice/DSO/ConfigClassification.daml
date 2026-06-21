@@ -11,8 +11,9 @@
 --
 -- Fields are identified by stable `Text` paths (e.g.
 -- `"DsoRulesConfig.voteCooldownTime"`, `"AmuletConfig.transferConfig"`) so that the
--- classification does not need a new Daml type per config record and can be
--- extended without changing this module's types.
+-- classification does not need a new Daml type per config record. Every votable
+-- config field must appear in the defaults map below; a new field is added here
+-- in the same change that introduces it.
 module Splice.DSO.ConfigClassification where
 
 import DA.Optional (fromOptional, isSome)
@@ -29,7 +30,6 @@ data ConfigFieldClassification
     -- network but does not change economic or governance policy.
   | CFC_Governance
     -- ^ Governance parameter: changing it is a policy decision of the SVs.
-    -- This is the default for fields without an explicit classification.
   | CFC_Fixed
     -- ^ Config field whose value must not change through ordinary config votes;
     -- the classification itself is still mutable via reclassification vote.
@@ -39,9 +39,7 @@ data ConfigFieldClassification
 -- `"DsoRulesConfig.<fieldName>"`.
 --
 -- The defaults below are a concrete starting point for maintainer and CIP
--- review, not a final statement of governance policy. Fields default to
--- governance and are individually classified as operational (or fixed) where
--- the operational character is clear-cut.
+-- review, not a final statement of governance policy.
 dsoRulesConfigFieldDefaults : [(Text, ConfigFieldClassification)]
 dsoRulesConfigFieldDefaults =
   [ ("DsoRulesConfig.numUnclaimedRewardsThreshold", CFC_Operational)
@@ -87,12 +85,12 @@ configFieldDefaults =
 isKnownConfigField : Text -> Bool
 isKnownConfigField fieldPath = isSome (TextMap.lookup fieldPath configFieldDefaults)
 
--- | The default classification of a field. Unknown fields (e.g. fields added
--- by a newer config version before this module catches up) default to
--- governance.
+-- | The default classification of a known field path.
 defaultConfigFieldClassification : Text -> ConfigFieldClassification
 defaultConfigFieldClassification fieldPath =
-  fromOptional CFC_Governance (TextMap.lookup fieldPath configFieldDefaults)
+  case TextMap.lookup fieldPath configFieldDefaults of
+    None -> error ("Unknown config field path: " <> fieldPath)
+    Some classification -> classification
 
 -- | The effective classification of a field given the on-ledger overrides.
 effectiveConfigFieldClassification

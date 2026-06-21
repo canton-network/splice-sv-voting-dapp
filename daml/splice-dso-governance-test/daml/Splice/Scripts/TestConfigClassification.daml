@@ -24,8 +24,7 @@ testConfigFieldClassificationDefaults = do
   defaultConfigFieldClassification "AmuletConfig.transferConfig" === CFC_Governance
   defaultConfigFieldClassification "AmuletConfig.packageConfig" === CFC_Operational
 
-  -- Unknown fields default to governance.
-  defaultConfigFieldClassification "DsoRulesConfig.someFutureField" === CFC_Governance
+  -- Unknown field paths are not classified.
   isKnownConfigField "DsoRulesConfig.someFutureField" === False
 
   -- All known fields are listed exactly once and resolvable.
