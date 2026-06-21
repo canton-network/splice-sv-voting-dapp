@@ -1185,8 +1185,7 @@ template DsoRules with
     -- registry only carries deviations from the defaults.
     --
     -- This choice is invoked via the SRARC_SetConfigFieldClassification action
-    -- through the standard vote flow; the classification is dormant metadata
-    -- in Phase 1 and does not restrict how configuration changes are voted on.
+    -- through the standard vote flow.
     nonconsuming choice DsoRules_SetConfigFieldClassification : DsoRules_SetConfigFieldClassificationResult
       with
         fieldPath : Text

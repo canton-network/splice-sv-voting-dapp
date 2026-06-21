@@ -24,7 +24,7 @@ testConfigFieldClassificationDefaults = do
   defaultConfigFieldClassification "AmuletConfig.transferConfig" === CFC_Governance
   defaultConfigFieldClassification "AmuletConfig.packageConfig" === CFC_Operational
 
-  -- Unknown fields default to governance per the amended Milestone 1 scope.
+  -- Unknown fields default to governance.
   defaultConfigFieldClassification "DsoRulesConfig.someFutureField" === CFC_Governance
   isKnownConfigField "DsoRulesConfig.someFutureField" === False
 

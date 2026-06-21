@@ -4,12 +4,10 @@
 -- | Field-level classification of DSO governance configuration.
 --
 -- Every individually votable configuration field of `DsoRulesConfig` and
--- `AmuletConfig` is classified as operational, governance, or fixed. The
--- classification is *dormant metadata* in Phase 1: it does not restrict how
--- configuration changes are voted on. It exists so that a later phase can
--- route operational fields to the operator path and governance fields to the
--- governance-voter path, with the classification itself already governed
--- on-ledger.
+-- `AmuletConfig` is classified as operational, governance, or fixed. Defaults
+-- are defined in this module; deviations live in the on-ledger
+-- `ConfigFieldClassifications` registry, updated exclusively through the
+-- `SRARC_SetConfigFieldClassification` vote action.
 --
 -- Fields are identified by stable `Text` paths (e.g.
 -- `"DsoRulesConfig.voteCooldownTime"`, `"AmuletConfig.transferConfig"`) so that the
@@ -41,10 +39,9 @@ data ConfigFieldClassification
 -- `"DsoRulesConfig.<fieldName>"`.
 --
 -- The defaults below are a concrete starting point for maintainer and CIP
--- review, not a final statement of governance policy: per the amended
--- Milestone 1 scope, fields default to governance and are individually
--- classified as operational (or fixed) where the operational character is
--- clear-cut.
+-- review, not a final statement of governance policy. Fields default to
+-- governance and are individually classified as operational (or fixed) where
+-- the operational character is clear-cut.
 dsoRulesConfigFieldDefaults : [(Text, ConfigFieldClassification)]
 dsoRulesConfigFieldDefaults =
   [ ("DsoRulesConfig.numUnclaimedRewardsThreshold", CFC_Operational)
@@ -92,7 +89,7 @@ isKnownConfigField fieldPath = isSome (TextMap.lookup fieldPath configFieldDefau
 
 -- | The default classification of a field. Unknown fields (e.g. fields added
 -- by a newer config version before this module catches up) default to
--- governance, per the amended Milestone 1 scope.
+-- governance.
 defaultConfigFieldClassification : Text -> ConfigFieldClassification
 defaultConfigFieldClassification fieldPath =
   fromOptional CFC_Governance (TextMap.lookup fieldPath configFieldDefaults)
