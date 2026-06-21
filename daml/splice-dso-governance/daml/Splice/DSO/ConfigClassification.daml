@@ -31,8 +31,8 @@ data ConfigFieldClassification
     -- ^ Governance parameter: changing it is a policy decision of the SVs.
     -- This is the default for fields without an explicit classification.
   | CFC_Fixed
-    -- ^ Not changeable through the classification vote process; the
-    -- classification of a fixed field is itself immutable.
+    -- ^ Config field whose value must not change through ordinary config votes;
+    -- the classification itself is still mutable via reclassification vote.
   deriving (Eq, Show)
 
 -- | Default classification for the known `DsoRulesConfig` fields, keyed by
@@ -95,14 +95,11 @@ defaultConfigFieldClassification fieldPath =
   fromOptional CFC_Governance (TextMap.lookup fieldPath configFieldDefaults)
 
 -- | The effective classification of a field given the on-ledger overrides.
--- Fixed-by-default fields ignore overrides entirely: their classification is
--- immutable by construction even if an override entry were ever present.
 effectiveConfigFieldClassification
   : Map.Map Text ConfigFieldClassification -> Text -> ConfigFieldClassification
 effectiveConfigFieldClassification overrides fieldPath =
-  case defaultConfigFieldClassification fieldPath of
-    CFC_Fixed -> CFC_Fixed
-    def -> fromOptional def (Map.lookup fieldPath overrides)
+  let def = defaultConfigFieldClassification fieldPath
+  in fromOptional def (Map.lookup fieldPath overrides)
 
 -- | Singleton registry, signed by the DSO party, of classification overrides relative to
 -- the defaults above. The contract is created and updated exclusively through

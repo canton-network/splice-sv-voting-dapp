@@ -33,14 +33,13 @@ testConfigFieldClassificationDefaults = do
     isKnownConfigField fieldPath === True
     defaultConfigFieldClassification fieldPath === classification
 
-  -- Overrides apply to non-fixed fields only; fixed fields ignore overrides
-  -- by construction.
+  -- Overrides apply uniformly, including for fields that default to fixed.
   let overrides = Map.fromList
         [ ("DsoRulesConfig.actionConfirmationTimeout", CFC_Governance)
         , ("DsoRulesConfig.maxTextLength", CFC_Governance)
         ]
   effectiveConfigFieldClassification overrides "DsoRulesConfig.actionConfirmationTimeout" === CFC_Governance
-  effectiveConfigFieldClassification overrides "DsoRulesConfig.maxTextLength" === CFC_Fixed
+  effectiveConfigFieldClassification overrides "DsoRulesConfig.maxTextLength" === CFC_Governance
   effectiveConfigFieldClassification overrides "DsoRulesConfig.voteCooldownTime" === CFC_Governance
   pure ()
 
@@ -87,23 +86,48 @@ testSetConfigFieldClassification = do
     newClassification = CFC_Operational
     currentClassificationsCid = Some classificationsCid2
 
-  -- Fixed-by-default fields cannot be reclassified.
-  submitMustFail dso $ exerciseCmd dsoRulesCid DsoRules_SetConfigFieldClassification with
-    fieldPath = "DsoRulesConfig.maxTextLength"
-    newClassification = CFC_Governance
-    currentClassificationsCid = Some classificationsCid2
+  -- Fields that default to fixed are reclassifiable through the vote flow.
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $ ARC_DsoRules with
+    dsoAction = SRARC_SetConfigFieldClassification DsoRules_SetConfigFieldClassification with
+      fieldPath = "DsoRulesConfig.maxTextLength"
+      newClassification = CFC_Governance
+      currentClassificationsCid = Some classificationsCid2
+  None <- queryContractId dso classificationsCid2
+  [(classificationsCid3, classifications3)] <- query @ConfigFieldClassifications dso
+  classifications3.overrides === Map.fromList [("DsoRulesConfig.maxTextLength", CFC_Governance)]
+  effectiveConfigFieldClassification classifications3.overrides "DsoRulesConfig.maxTextLength"
+    === CFC_Governance
 
-  -- No field can be reclassified *to* fixed.
-  submitMustFail dso $ exerciseCmd dsoRulesCid DsoRules_SetConfigFieldClassification with
-    fieldPath = "DsoRulesConfig.voteCooldownTime"
-    newClassification = CFC_Fixed
-    currentClassificationsCid = Some classificationsCid2
+  -- A field can be reclassified to fixed.
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $ ARC_DsoRules with
+    dsoAction = SRARC_SetConfigFieldClassification DsoRules_SetConfigFieldClassification with
+      fieldPath = "DsoRulesConfig.voteCooldownTime"
+      newClassification = CFC_Fixed
+      currentClassificationsCid = Some classificationsCid3
+  None <- queryContractId dso classificationsCid3
+  [(classificationsCid4, classifications4)] <- query @ConfigFieldClassifications dso
+  classifications4.overrides === Map.fromList
+    [ ("DsoRulesConfig.maxTextLength", CFC_Governance)
+    , ("DsoRulesConfig.voteCooldownTime", CFC_Fixed)
+    ]
+  effectiveConfigFieldClassification classifications4.overrides "DsoRulesConfig.voteCooldownTime"
+    === CFC_Fixed
+
+  -- Reverting to the default classification removes the override entry.
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $ ARC_DsoRules with
+    dsoAction = SRARC_SetConfigFieldClassification DsoRules_SetConfigFieldClassification with
+      fieldPath = "DsoRulesConfig.maxTextLength"
+      newClassification = CFC_Fixed
+      currentClassificationsCid = Some classificationsCid4
+  None <- queryContractId dso classificationsCid4
+  [(classificationsCid5, classifications5)] <- query @ConfigFieldClassifications dso
+  classifications5.overrides === Map.fromList [("DsoRulesConfig.voteCooldownTime", CFC_Fixed)]
 
   -- No-op reclassifications are rejected.
   submitMustFail dso $ exerciseCmd dsoRulesCid DsoRules_SetConfigFieldClassification with
     fieldPath = "DsoRulesConfig.voteCooldownTime"
-    newClassification = CFC_Governance
-    currentClassificationsCid = Some classificationsCid2
+    newClassification = CFC_Fixed
+    currentClassificationsCid = Some classificationsCid5
 
   -- The registry is signed by the DSO party and cannot be bare-created by an SV.
   submitMustFail sv1 $ createCmd ConfigFieldClassifications with

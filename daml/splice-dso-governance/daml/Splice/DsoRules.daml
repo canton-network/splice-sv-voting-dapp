@@ -1194,11 +1194,6 @@ template DsoRules with
       controller dso
       do
         require "Field is a known configuration field" (isKnownConfigField fieldPath)
-        require "Field is not fixed" (defaultConfigFieldClassification fieldPath /= CFC_Fixed)
-        -- Fixed classifications are defined statically in the defaults map
-        -- only: allowing a vote to fix a field would make the reclassification
-        -- process irreversible for that field.
-        require "Cannot reclassify a field to fixed" (newClassification /= CFC_Fixed)
         overrides <- case currentClassificationsCid of
           None -> pure Map.empty
           Some cid -> do
