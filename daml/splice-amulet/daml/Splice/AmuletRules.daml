@@ -2294,7 +2294,7 @@ payForTransferPreapproval dso provider context inputs expiresAt newExpiresAt = d
         , emptyMetadata)
     else do
       (amuletPaid, _) <- computeTransferPreapprovalFee paidExtension configUsd context.context dso
-      (transferResult, meta) <- splitAndBurn provider amuletPaid inputs context.context dso "renew TransferPreapproval"
+      (transferResult, meta) <- splitAndBurn (toInterfaceContractId context.amuletRules) provider amuletPaid inputs context.context dso "renew TransferPreapproval"
       pure (amuletPaid, transferResult, meta)
 
 -- Token standard context parsing
