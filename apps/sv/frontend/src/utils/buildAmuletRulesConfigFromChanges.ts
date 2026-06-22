@@ -92,7 +92,7 @@ export function buildAmuletRulesConfigFromChanges(
     'externalPartyConfigStateTickDuration',
     true
   );
-  const transferConfigTokenStandardMaxTTL = getValue('transferConfigTokenStandardMaxTTL');
+  const transferConfigTokenStandardMaxTTL = getValue('transferConfigTokenStandardMaxTTL', true);
   const rewardConfigMintingVersion = getValue('rewardConfigMintingVersion', true);
   const amuletConfig: AmuletConfig<'USD'> = {
     tickDuration: { microseconds: getValue('tickDuration', false) },
@@ -117,9 +117,9 @@ export function buildAmuletRulesConfigFromChanges(
       maxNumOutputs: getValue('transferConfigMaxNumOutputs', false),
       maxNumLockHolders: getValue('transferConfigMaxNumLockHolders', false),
       tokenStandardMaxTTL:
-        transferConfigTokenStandardMaxTTL === ''
-          ? null
-          : { microseconds: transferConfigTokenStandardMaxTTL },
+        transferConfigTokenStandardMaxTTL && transferConfigTokenStandardMaxTTL !== ''
+          ? { microseconds: transferConfigTokenStandardMaxTTL }
+          : null,
     },
 
     issuanceCurve: {
