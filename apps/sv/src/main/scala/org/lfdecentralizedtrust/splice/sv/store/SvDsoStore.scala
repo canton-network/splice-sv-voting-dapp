@@ -823,6 +823,64 @@ trait SvDsoStore
       )
     } yield unclaimedRewards map (_.contract)
 
+  /** Lists the governance-voter bindings visible to the DSO party.
+    *
+    * Phase 1 dormant state: this is read-only observability. Bindings have no
+    * indexed columns, so we list the (small, one-per-SV) population and let
+    * callers filter in-app rather than introduce a schema migration for a
+    * feature that does not yet drive any behavior.
+    */
+  final def listSvGovernanceVoters(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[Contract[
+    splice.dso.governancevoter.SvGovernanceVoter.ContractId,
+    splice.dso.governancevoter.SvGovernanceVoter,
+  ]]] =
+    for {
+      bindings <- multiDomainAcsStore.listContracts(
+        splice.dso.governancevoter.SvGovernanceVoter.COMPANION,
+        limit = limit,
+      )
+    } yield bindings.map(_.contract)
+
+  /** Looks up the active governance-voter binding for a represented SV.
+    *
+    * Onboarding installs exactly one self-binding per SV and rotation
+    * preserves that invariant, so at most one binding is expected; if more are
+    * observed (e.g. transiently during ingestion, or from older package
+    * versions), the first by contract id is returned deterministically.
+    */
+  final def lookupSvGovernanceVoterBySv(
+      sv: PartyId
+  )(implicit tc: TraceContext): Future[Option[Contract[
+    splice.dso.governancevoter.SvGovernanceVoter.ContractId,
+    splice.dso.governancevoter.SvGovernanceVoter,
+  ]]] =
+    for {
+      bindings <- listSvGovernanceVoters()
+    } yield bindings
+      .filter(_.payload.sv == sv.toProtoPrimitive)
+      .sortBy(_.contractId.contractId)
+      .headOption
+
+  /** Looks up the singleton config-field-classification overrides registry, if
+    * one has been created by a reclassification vote.
+    *
+    * The default classification of each field lives in the
+    * `Splice.DSO.ConfigClassification` Daml module and is intentionally not
+    * duplicated here; this returns only the on-ledger deviations from those
+    * defaults so the two cannot drift.
+    */
+  final def lookupConfigFieldClassifications()(implicit tc: TraceContext): Future[Option[Contract[
+    splice.dso.configclassification.ConfigFieldClassifications.ContractId,
+    splice.dso.configclassification.ConfigFieldClassifications,
+  ]]] =
+    for {
+      registries <- multiDomainAcsStore.listContracts(
+        splice.dso.configclassification.ConfigFieldClassifications.COMPANION
+      )
+    } yield registries.map(_.contract).sortBy(_.contractId.contractId).headOption
+
   def listMemberTrafficContracts(memberId: Member, synchronizerId: SynchronizerId, limit: Limit)(
       implicit tc: TraceContext
   ): Future[
@@ -1577,6 +1635,40 @@ object SvDsoStore {
           contract,
           contractExpiresAt =
             Some(Timestamp.assertFromInstant(contract.payload.allocation.settlement.settleBefore)),
+        )
+      },
+      // Governance-voter bindings and the config-field-classification registry
+      // are ingested so the SV app can observe the dormant Phase 1 state. They
+      // carry no indexed columns: callers list them via `listContracts` and
+      // filter in-app, which is adequate for the small, low-churn populations
+      // (one binding per SV, one singleton registry).
+      //
+      // Both templates were introduced in splice-dso-governance 0.1.27, so the
+      // ACS ingestion filter is version-guarded: until that DAR is vetted the
+      // templates are omitted from GetActiveContracts, which would otherwise
+      // fail with NO_TEMPLATES_FOR_PACKAGE_NAME_AND_QUALIFIED_NAME on a
+      // participant that only has an older dso-governance version vetted (e.g.
+      // a minimum-version bootstrap). Contracts are still ingested via the
+      // wildcard updates stream once vetting catches up.
+      mkFilter(splice.dso.governancevoter.SvGovernanceVoter.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsGovernanceVoter(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          svParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.sv)),
+        )
+      },
+      mkFilter(splice.dso.configclassification.ConfigFieldClassifications.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsGovernanceVoter(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract
         )
       },
     )

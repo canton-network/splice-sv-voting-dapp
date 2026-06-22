@@ -24,6 +24,11 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsync
   DsoDecentralizedSynchronizerConfig,
   SynchronizerNodeConfigLimits,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.configclassification.{
+  ConfigFieldClassification,
+  ConfigFieldClassifications,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.governancevoter.SvGovernanceVoter
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.{
   ARC_AmuletRules,
@@ -205,6 +210,104 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     )(
       _.lookupFeaturedAppRightWithOffset(userParty(1))
     )
+
+    "listSvGovernanceVoters" should {
+
+      "return all ingested governance-voter bindings" in {
+        val bindings = (1 to 3).map(n => svGovernanceVoter(userParty(n), userParty(n)))
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(bindings)(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.listSvGovernanceVoters()
+        } yield result.toSet should be(bindings.toSet)
+      }
+
+      "return an empty list when no bindings have been ingested" in {
+        for {
+          store <- mkStore()
+          result <- store.listSvGovernanceVoters()
+        } yield result should be(empty)
+      }
+    }
+
+    "lookupSvGovernanceVoterBySv" should {
+
+      "return the binding for the represented SV" in {
+        val self = svGovernanceVoter(userParty(1), userParty(1))
+        val delegated = svGovernanceVoter(userParty(2), userParty(42))
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(self)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(delegated)(store.multiDomainAcsStore)
+          selfResult <- store.lookupSvGovernanceVoterBySv(userParty(1))
+          delegatedResult <- store.lookupSvGovernanceVoterBySv(userParty(2))
+        } yield {
+          selfResult should be(Some(self))
+          delegatedResult.map(_.payload.governanceVoter) should be(
+            Some(userParty(42).toProtoPrimitive)
+          )
+        }
+      }
+
+      "return None when the SV has no binding" in {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(svGovernanceVoter(userParty(1), userParty(1)))(
+            store.multiDomainAcsStore
+          )
+          result <- store.lookupSvGovernanceVoterBySv(userParty(2))
+        } yield result should be(None)
+      }
+
+      "return a deterministic binding if duplicates are observed" in {
+        // The Daml model keeps one binding per SV, but ingestion or older
+        // package versions could transiently surface more; the lookup must be
+        // deterministic regardless.
+        val first = svGovernanceVoter(userParty(1), userParty(10), contractId = validContractId(10))
+        val second =
+          svGovernanceVoter(userParty(1), userParty(11), contractId = validContractId(11))
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(second)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(first)(store.multiDomainAcsStore)
+          result <- store.lookupSvGovernanceVoterBySv(userParty(1))
+        } yield result should be(Some(first))
+      }
+    }
+
+    "lookupConfigFieldClassifications" should {
+
+      "return the singleton overrides registry" in {
+        val registry = configFieldClassifications(
+          Map(
+            "DsoRulesConfig.actionConfirmationTimeout" -> ConfigFieldClassification.CFC_GOVERNANCE
+          )
+        )
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(registry)(store.multiDomainAcsStore)
+          result <- store.lookupConfigFieldClassifications()
+        } yield {
+          result should be(Some(registry))
+          result.map(_.payload.overrides.asScala.toMap) should be(
+            Some(
+              Map(
+                "DsoRulesConfig.actionConfirmationTimeout" -> ConfigFieldClassification.CFC_GOVERNANCE
+              )
+            )
+          )
+        }
+      }
+
+      "return None when no registry has been created" in {
+        for {
+          store <- mkStore()
+          result <- store.lookupConfigFieldClassifications()
+        } yield result should be(None)
+      }
+    }
 
     "getOpenMiningRoundTriple" should {
 
@@ -1811,6 +1914,34 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       template,
     )
   }
+
+  protected def svGovernanceVoter(
+      sv: PartyId,
+      governanceVoter: PartyId,
+      contractId: String = nextCid(),
+  ): Contract[SvGovernanceVoter.ContractId, SvGovernanceVoter] =
+    contract(
+      SvGovernanceVoter.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new SvGovernanceVoter.ContractId(contractId),
+      new SvGovernanceVoter(
+        dsoParty.toProtoPrimitive,
+        sv.toProtoPrimitive,
+        governanceVoter.toProtoPrimitive,
+      ),
+    )
+
+  protected def configFieldClassifications(
+      overrides: Map[String, ConfigFieldClassification],
+      contractId: String = nextCid(),
+  ): Contract[ConfigFieldClassifications.ContractId, ConfigFieldClassifications] =
+    contract(
+      ConfigFieldClassifications.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new ConfigFieldClassifications.ContractId(contractId),
+      new ConfigFieldClassifications(
+        dsoParty.toProtoPrimitive,
+        overrides.asJava,
+      ),
+    )
 
   private def memberTraffic(
       member: Member,

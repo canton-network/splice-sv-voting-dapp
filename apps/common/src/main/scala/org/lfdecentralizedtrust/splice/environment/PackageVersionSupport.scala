@@ -143,6 +143,24 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
+  // The SvGovernanceVoter and ConfigFieldClassifications templates were
+  // introduced in splice-dso-governance 0.1.27. Gate their ACS ingestion on
+  // that version so the store filter omits them until the DAR is vetted:
+  // otherwise GetActiveContracts fails with
+  // NO_TEMPLATES_FOR_PACKAGE_NAME_AND_QUALIFIED_NAME on participants that only
+  // have an older dso-governance version vetted (e.g. minimum-version bootstrap).
+  def supportsGovernanceVoter(parties: Seq[PartyId], now: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] = {
+    isDarSupported(
+      parties,
+      PackageIdResolver.Package.SpliceDsoGovernance,
+      now,
+      DarResources.dsoGovernance,
+      DarResources.dsoGovernance_0_1_27,
+    )
+  }
+
   def supportsTrafficBasedAppRewards(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[FeatureSupport] =
