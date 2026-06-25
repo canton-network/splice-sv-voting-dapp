@@ -63,4 +63,10 @@
           ``CRARC_MiningRound_Archive``, ``CRARC_MiningRound_StartIssuing`` and
           ``CRARC_StartProcessingRewardsV2``
 
-        - The governance Vote History is now ordered by effective date rather than ingestion order
+        - The governance Vote History is now ordered by effective date rather than ingestion order.
+
+        - The Set DSO Rules governance form now accepts an empty (null) ACS commitment reconciliation interval instead of requiring a value.
+
+        - Config-change diffs for DSO Rules and Amulet configuration proposals now show correct Daml maps serialized to JSON.
+
+        - The proposal form to unfeature an app now clearly indicates when there are no featured apps available to unfeature, instead of showing an empty selector.
