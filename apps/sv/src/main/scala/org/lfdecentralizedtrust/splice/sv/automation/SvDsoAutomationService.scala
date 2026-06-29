@@ -597,6 +597,12 @@ class SvDsoAutomationService(
         dsoStore,
       )
     )
+    registerTrigger(
+      new RewardMetricsTrigger(
+        triggerContext,
+        dsoStore,
+      )
+    )
 
     registerTrigger(
       new PublishScanConfigTrigger(
@@ -759,6 +765,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[FollowAmuletConversionRateFeedTrigger],
       aTrigger[CopyVotesTrigger],
       aTrigger[AmuletPriceMetricsTrigger],
+      aTrigger[RewardMetricsTrigger],
       aTrigger[CreateBootstrapExternalPartyConfigStateInstructionTrigger],
       aTrigger[LsuTrigger],
       aTrigger[LsuAnnouncementTrigger],
