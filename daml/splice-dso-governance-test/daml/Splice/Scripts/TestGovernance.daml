@@ -21,6 +21,7 @@ import Splice.Issuance()
 
 
 import Splice.DsoRules
+import Splice.DsoRules.VoteDelegation
 import Splice.DSO.AmuletPrice
 import Splice.AmuletConfig
 import Splice.CometBft
@@ -47,7 +48,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
 
   -- sv1 initiates the granting of the featured app right for the provider with no effective time
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -122,7 +123,7 @@ testVoteRequestAcceptanceWithEffectivity = do
 
   -- sv1 initiates the granting of the featured app right for the provider
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -213,7 +214,7 @@ testVoteRequestRejectionWithoutEffectivity = do
 
   -- sv1 initiates the granting of the featured app right for the provider
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -259,7 +260,7 @@ testVoteRequestRejectionWithEffectivityBeforeExpiration = do
 
   -- sv1 initiates the granting of the featured app right for the provider
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -305,7 +306,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
 
   -- voteRequests with an effective time set before the expiration date must fail
   submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -316,7 +317,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
 
   -- sv1 initiates the granting of the featured app right for the provider
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -368,7 +369,7 @@ testRacingSvRemoval = do
 
   -- sv1 is not happy with sv2, and issues two removal requests at the same time!
   result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -378,7 +379,7 @@ testRacingSvRemoval = do
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
 
   result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -389,7 +390,7 @@ testRacingSvRemoval = do
 
   -- sv2 counters and wants to remove sv1
   result3 <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv2
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -403,7 +404,7 @@ testRacingSvRemoval = do
   let effectiveTime = addRelTime now (days 8)
 
   result4 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -511,7 +512,7 @@ testRacingSvRemoval = do
   -- The story continues: sv3 tries to remove sv4
   [(dsoRulesCid, _)] <- query @DsoRules dso
   result4 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv3
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -540,7 +541,7 @@ testRacingSvRemoval = do
 
   -- Let's see if sv3 and sv4 can work together to also remove sv4
   result5 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv3
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -624,7 +625,7 @@ testDsoRulesConfigChange = do
   -- creation of two concurrent independent vote requests
   [(dsoRulesCid, _)] <- query @DsoRules dso
   result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_SetConfig DsoRules_SetConfig with
@@ -635,7 +636,7 @@ testDsoRulesConfigChange = do
     voteRequestTimeout = Some (days 2)
 
   result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_SetConfig DsoRules_SetConfig with
@@ -699,7 +700,7 @@ testAmuletRulesTickDurationChange = do
 
   [(amuletRulesCid, amuletRules)] <- query @AmuletRules dso
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_AmuletRules with
       amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
@@ -804,7 +805,7 @@ testAmuletRulesConfigChange = do
   -- creation of two concurrent independent vote requests
   [(amuletRulesCid, amuletRules)] <- query @AmuletRules dso
   result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_AmuletRules with
       amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
@@ -815,7 +816,7 @@ testAmuletRulesConfigChange = do
     voteRequestTimeout = Some (days 2)
 
   result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_AmuletRules with
       amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
@@ -926,7 +927,7 @@ testVoteRequestExpireWithoutEffectivity = do
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
   requestResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -969,7 +970,7 @@ testVoteRequestExpireWithEffectivity = do
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
   requestResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
@@ -1078,7 +1079,7 @@ testVoteCastingCooldown  = do
 
   -- create vote request to use for testing
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
-    governanceParty = None
+    voterParty = None
     requester = sv1
     action = ARC_DsoRules with
       dsoAction = SRARC_OffboardSv DsoRules_OffboardSv with
@@ -1150,16 +1151,16 @@ testVoteDelegationRequestVote = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
   provider <- allocateParty "provider"
-  governanceParty <- allocateParty "governanceParty"
+  voterParty <- allocateParty "voterParty"
 
   delegationCid <- submit sv1 $ createCmd VoteDelegation with
     dso
     sv = sv1
-    governanceParty
+    voterParty
 
   let requestVote = DsoRules_RequestVote with
         requester = sv1
-        governanceParty = Some governanceParty
+        voterParty = Some voterParty
         action = ARC_DsoRules with
           dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
             provider
@@ -1167,11 +1168,11 @@ testVoteDelegationRequestVote = do
         targetEffectiveAt = None
         voteRequestTimeout = Some (days 7)
 
-  -- the governance party cannot exercise the choice directly, only via the delegation
-  submitMustFail (actAs governanceParty <> readAs dso) $
+  -- the voter party cannot exercise the choice directly, only via the delegation
+  submitMustFail (actAs voterParty <> readAs dso) $
     exerciseCmd dsoRulesCid requestVote
 
-  result <- submit (actAs governanceParty <> readAs dso) $
+  result <- submit (actAs voterParty <> readAs dso) $
     exerciseCmd delegationCid VoteDelegation_RequestVote with
       dsoRulesCid
       requestVote
@@ -1184,16 +1185,16 @@ testVoteDelegationRejectsMismatch = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
   provider <- allocateParty "provider"
-  governanceParty <- allocateParty "governanceParty"
+  voterParty <- allocateParty "voterParty"
 
   delegationCid <- submit sv1 $ createCmd VoteDelegation with
     dso
     sv = sv1
-    governanceParty
+    voterParty
 
   let mkRequest requester = DsoRules_RequestVote with
         requester
-        governanceParty = Some governanceParty
+        voterParty = Some voterParty
         action = ARC_DsoRules with
           dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
             provider
@@ -1202,7 +1203,7 @@ testVoteDelegationRejectsMismatch = do
         voteRequestTimeout = Some (days 7)
 
   -- the delegation only carries sv1's authority, so requesting on behalf of another SV fails
-  submitMustFail (actAs governanceParty <> readAs dso) $
+  submitMustFail (actAs voterParty <> readAs dso) $
     exerciseCmd delegationCid VoteDelegation_RequestVote with
       dsoRulesCid
       requestVote = mkRequest sv2

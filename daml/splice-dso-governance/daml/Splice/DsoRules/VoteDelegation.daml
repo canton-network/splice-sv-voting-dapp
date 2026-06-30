@@ -1,0 +1,33 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.DsoRules.VoteDelegation where
+
+import Splice.DsoRules
+import Splice.Types (ForDso(..))
+import Splice.Util
+
+data VoteDelegation_RequestVoteResult = VoteDelegation_RequestVoteResult with
+    voteRequest : ContractId VoteRequest
+  deriving (Eq, Show)
+
+template VoteDelegation
+  with
+    dso : Party
+    sv : Party
+    voterParty : Party
+  where
+    signatory sv
+    observer voterParty, dso
+
+    nonconsuming choice VoteDelegation_RequestVote : VoteDelegation_RequestVoteResult
+      with
+        dsoRulesCid : ContractId DsoRules
+        requestVote : DsoRules_RequestVote
+      controller voterParty
+      do
+        result <- exercise dsoRulesCid requestVote
+        pure VoteDelegation_RequestVoteResult with voteRequest = result.voteRequest
+
+instance HasCheckedFetch VoteDelegation ForDso where
+  contractGroupId VoteDelegation {..} = ForDso with dso

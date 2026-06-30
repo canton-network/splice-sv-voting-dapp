@@ -442,7 +442,7 @@ case class SvAppBackendConfig(
     // The party authorized to request votes on this SV's behalf via a VoteDelegation
     // contract. The who-can-vote distinction is intentionally NOT encoded in Daml; this
     // identity is read on the app side so it can be relocated to a different source later.
-    governancePartyId: Option[PartyId] = None,
+    voterPartyId: Option[PartyId] = None,
     // If true, we check that topology on mediator and sequencer is the same after
     // a migration. This can be a useful assertion but is very slow so should not be enabled on clusters with large topology state.
     validateTopologyAfterMigration: Boolean = false,
