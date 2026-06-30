@@ -21,7 +21,7 @@ import Splice.Issuance()
 
 
 import Splice.DsoRules
-import Splice.DsoRules.VoteDelegation
+import Splice.DsoRules.VoteDelegation qualified as Delegation
 import Splice.DSO.AmuletPrice
 import Splice.AmuletConfig
 import Splice.CometBft
@@ -1153,7 +1153,7 @@ testVoteDelegationRequestVote = do
   provider <- allocateParty "provider"
   voterParty <- allocateParty "voterParty"
 
-  delegationCid <- submit sv1 $ createCmd VoteDelegation with
+  delegationCid <- submit sv1 $ createCmd Delegation.VoteDelegation with
     dso
     sv = sv1
     voterParty
@@ -1173,7 +1173,7 @@ testVoteDelegationRequestVote = do
     exerciseCmd dsoRulesCid requestVote
 
   result <- submit (actAs voterParty <> readAs dso) $
-    exerciseCmd delegationCid VoteDelegation_RequestVote with
+    exerciseCmd delegationCid Delegation.VoteDelegation_RequestVote with
       dsoRulesCid
       requestVote
   [(voteRequestCid, _)] <- query @VoteRequest dso
@@ -1187,7 +1187,7 @@ testVoteDelegationRejectsMismatch = do
   provider <- allocateParty "provider"
   voterParty <- allocateParty "voterParty"
 
-  delegationCid <- submit sv1 $ createCmd VoteDelegation with
+  delegationCid <- submit sv1 $ createCmd Delegation.VoteDelegation with
     dso
     sv = sv1
     voterParty
@@ -1204,6 +1204,46 @@ testVoteDelegationRejectsMismatch = do
 
   -- the delegation only carries sv1's authority, so requesting on behalf of another SV fails
   submitMustFail (actAs voterParty <> readAs dso) $
-    exerciseCmd delegationCid VoteDelegation_RequestVote with
+    exerciseCmd delegationCid Delegation.VoteDelegation_RequestVote with
       dsoRulesCid
       requestVote = mkRequest sv2
+
+testVoteDelegationCastVote : Script ()
+testVoteDelegationCastVote = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  provider <- allocateParty "provider"
+  voterParty <- allocateParty "voterParty"
+
+  -- an open vote request that sv2 will vote on
+  requested <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv1
+    voterParty = None
+    action = ARC_DsoRules with
+      dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
+        provider
+    reason = Reason with url = ""; body = "request"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+
+  -- sv2 pre-authorizes voterParty to vote on its behalf
+  delegationCid <- submit sv2 $ createCmd Delegation.VoteDelegation with
+    dso
+    sv = sv2
+    voterParty
+
+  -- voterParty casts sv2's vote through the delegation
+  result <- submit (actAs voterParty <> readAs dso) $
+    exerciseCmd delegationCid Delegation.VoteDelegation_CastVote with
+      dsoRulesCid
+      castVote = DsoRules_CastVote with
+        requestCid = requested.voteRequest
+        vote = Vote with
+          sv = sv2
+          accept = True
+          reason = Reason with url = ""; body = "delegated cast"
+          optCastAt = None
+
+  [(voteRequestCid, _)] <- query @VoteRequest dso
+  voteRequestCid === result.voteRequest

@@ -11,6 +11,10 @@ data VoteDelegation_RequestVoteResult = VoteDelegation_RequestVoteResult with
     voteRequest : ContractId VoteRequest
   deriving (Eq, Show)
 
+data VoteDelegation_CastVoteResult = VoteDelegation_CastVoteResult with
+    voteRequest : ContractId VoteRequest
+  deriving (Eq, Show)
+
 template VoteDelegation
   with
     dso : Party
@@ -28,6 +32,15 @@ template VoteDelegation
       do
         result <- exercise dsoRulesCid requestVote
         pure VoteDelegation_RequestVoteResult with voteRequest = result.voteRequest
+
+    nonconsuming choice VoteDelegation_CastVote : VoteDelegation_CastVoteResult
+      with
+        dsoRulesCid : ContractId DsoRules
+        castVote : DsoRules_CastVote
+      controller voterParty
+      do
+        result <- exercise dsoRulesCid castVote
+        pure VoteDelegation_CastVoteResult with voteRequest = result.voteRequest
 
 instance HasCheckedFetch VoteDelegation ForDso where
   contractGroupId VoteDelegation {..} = ForDso with dso
