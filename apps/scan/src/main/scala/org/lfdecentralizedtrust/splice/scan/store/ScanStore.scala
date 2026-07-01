@@ -432,6 +432,13 @@ object ScanStore {
               Some(contract.payload.trackingCid.toScala.getOrElse(contract.contractId)),
           )
         },
+        // Ingest vote delegations so a voter party's pre-authorization is transparent
+        // network-wide via Scan (the DSO is an observer of VoteDelegation).
+        mkFilter(splice.dsorules.votedelegation.VoteDelegation.COMPANION)(co =>
+          co.payload.dso == dso
+        )(
+          ScanAcsStoreRowData(_)
+        ),
         mkFilter(splice.amuletrules.TransferPreapproval.COMPANION)(co => co.payload.dso == dso) {
           contract =>
             ScanAcsStoreRowData(
