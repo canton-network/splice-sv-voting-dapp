@@ -1247,3 +1247,98 @@ testVoteDelegationCastVote = do
 
   [(voteRequestCid, _)] <- query @VoteRequest dso
   voteRequestCid === result.voteRequest
+
+testVoteDelegationRejectsWrongDso : Script ()
+testVoteDelegationRejectsWrongDso = do
+  (_app, dso, (sv1, _sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  provider <- allocateParty "provider"
+  voterParty <- allocateParty "voterParty"
+  otherDso <- allocateParty "otherDso"
+
+  -- the delegation claims a different dso than the DsoRules it is driven against
+  delegationCid <- submit sv1 $ createCmd Delegation.VoteDelegation with
+    dso = otherDso
+    sv = sv1
+    voterParty
+
+  let requestVote = DsoRules_RequestVote with
+        requester = sv1
+        voterParty = Some voterParty
+        action = ARC_DsoRules with
+          dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
+            provider
+        reason = Reason with url = ""; body = "delegated request"
+        targetEffectiveAt = None
+        voteRequestTimeout = Some (days 7)
+
+  submitMustFail (actAs voterParty <> readAs dso) $
+    exerciseCmd delegationCid Delegation.VoteDelegation_RequestVote with
+      dsoRulesCid
+      requestVote
+
+testVoteDelegationRejectsWrongVoterParty : Script ()
+testVoteDelegationRejectsWrongVoterParty = do
+  (_app, dso, (sv1, _sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  provider <- allocateParty "provider"
+  voterParty <- allocateParty "voterParty"
+
+  delegationCid <- submit sv1 $ createCmd Delegation.VoteDelegation with
+    dso
+    sv = sv1
+    voterParty
+
+  let mkRequest voter = DsoRules_RequestVote with
+        requester = sv1
+        voterParty = voter
+        action = ARC_DsoRules with
+          dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
+            provider
+        reason = Reason with url = ""; body = "delegated request"
+        targetEffectiveAt = None
+        voteRequestTimeout = Some (days 7)
+
+  -- a delegated request that does not carry this delegation's voter party is rejected
+  submitMustFail (actAs voterParty <> readAs dso) $
+    exerciseCmd delegationCid Delegation.VoteDelegation_RequestVote with
+      dsoRulesCid
+      requestVote = mkRequest None
+
+testVoteDelegationCastVoteRejectsWrongSv : Script ()
+testVoteDelegationCastVoteRejectsWrongSv = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  provider <- allocateParty "provider"
+  voterParty <- allocateParty "voterParty"
+
+  -- an open vote request that a delegate might try to cast against
+  requested <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv1
+    voterParty = None
+    action = ARC_DsoRules with
+      dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
+        provider
+    reason = Reason with url = ""; body = "request"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+
+  -- sv1 delegates to voterParty, but the cast targets sv2's vote
+  delegationCid <- submit sv1 $ createCmd Delegation.VoteDelegation with
+    dso
+    sv = sv1
+    voterParty
+
+  submitMustFail (actAs voterParty <> readAs dso) $
+    exerciseCmd delegationCid Delegation.VoteDelegation_CastVote with
+      dsoRulesCid
+      castVote = DsoRules_CastVote with
+        requestCid = requested.voteRequest
+        vote = Vote with
+          sv = sv2
+          accept = True
+          reason = Reason with url = ""; body = "delegated cast"
+          optCastAt = None
