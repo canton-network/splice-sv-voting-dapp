@@ -10,7 +10,7 @@ import DA.Assert
 import DA.Either (partitionEithers)
 import DA.Foldable (forA_, all)
 import DA.List as List hiding (all)
-import DA.Optional (isNone, fromSome, fromOptional, isSome, optionalToList)
+import DA.Optional (isNone, fromSome, fromOptional, isSome)
 import qualified DA.Map as Map
 import qualified DA.Set as Set
 import qualified DA.Text as T
@@ -754,7 +754,7 @@ template DsoRules with
         voteRequestTimeout : Optional RelTime
         targetEffectiveAt : Optional Time
         voterParty : Optional Party
-      controller requester :: optionalToList voterParty
+      controller requester, voterParty
       do
         requesterName <- case requester `Map.lookup` svs of
           None -> fail "Requester is not an SV"
