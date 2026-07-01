@@ -33,7 +33,6 @@ template VoteDelegation
         require "Delegated request is for the delegating SV" (requestVote.requester == sv)
         require "Delegated request carries this delegation's voter party" (requestVote.voterParty == Some voterParty)
         result <- exercise dsoRulesCid requestVote
-        require "Delegation and DsoRules are for the same DSO" (result.dso == dso)
         pure VoteDelegation_RequestVoteResult with voteRequest = result.voteRequest
 
     nonconsuming choice VoteDelegation_CastVote : VoteDelegation_CastVoteResult
@@ -44,7 +43,6 @@ template VoteDelegation
       do
         require "Delegated vote is cast on behalf of the delegating SV" (castVote.vote.sv == sv)
         result <- exercise dsoRulesCid castVote
-        require "Delegation and DsoRules are for the same DSO" (result.dso == dso)
         pure VoteDelegation_CastVoteResult with voteRequest = result.voteRequest
 
 instance HasCheckedFetch VoteDelegation ForDso where

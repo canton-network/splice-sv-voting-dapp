@@ -1248,36 +1248,6 @@ testVoteDelegationCastVote = do
   [(voteRequestCid, _)] <- query @VoteRequest dso
   voteRequestCid === result.voteRequest
 
-testVoteDelegationRejectsWrongDso : Script ()
-testVoteDelegationRejectsWrongDso = do
-  (_app, dso, (sv1, _sv2, _sv3, _sv4)) <- initMainNet
-  [(dsoRulesCid, _)] <- query @DsoRules dso
-
-  provider <- allocateParty "provider"
-  voterParty <- allocateParty "voterParty"
-  otherDso <- allocateParty "otherDso"
-
-  -- the delegation claims a different dso than the DsoRules it is driven against
-  delegationCid <- submit sv1 $ createCmd Delegation.VoteDelegation with
-    dso = otherDso
-    sv = sv1
-    voterParty
-
-  let requestVote = DsoRules_RequestVote with
-        requester = sv1
-        voterParty = Some voterParty
-        action = ARC_DsoRules with
-          dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
-            provider
-        reason = Reason with url = ""; body = "delegated request"
-        targetEffectiveAt = None
-        voteRequestTimeout = Some (days 7)
-
-  submitMustFail (actAs voterParty <> readAs dso) $
-    exerciseCmd delegationCid Delegation.VoteDelegation_RequestVote with
-      dsoRulesCid
-      requestVote
-
 testVoteDelegationRejectsWrongVoterParty : Script ()
 testVoteDelegationRejectsWrongVoterParty = do
   (_app, dso, (sv1, _sv2, _sv3, _sv4)) <- initMainNet

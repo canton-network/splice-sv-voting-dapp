@@ -189,11 +189,9 @@ data DsoRules_ExpireStaleConfirmationResult = DsoRules_ExpireStaleConfirmationRe
 
 data DsoRules_RequestVoteResult = DsoRules_RequestVoteResult with
     voteRequest : ContractId VoteRequest
-    dso : Party
 
 data DsoRules_CastVoteResult = DsoRules_CastVoteResult with
     voteRequest : ContractId VoteRequest
-    dso : Party
 
 data DsoRules_UpdateAmuletPriceVoteResult = DsoRules_UpdateAmuletPriceVoteResult with
     amuletPriceVote : ContractId AmuletPriceVote
