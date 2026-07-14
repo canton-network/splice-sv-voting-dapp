@@ -247,7 +247,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
                 label="Proposed Changes"
                 value={<ConfigValuesChanges changes={proposalDetails.proposal.configChanges} />}
               />
-              <JsonDiffAccordion>
+              <JsonDiffAccordion variant="review">
                 {amuletConfigToCompareWith ? (
                   <PrettyJsonDiff
                     changes={{
@@ -268,7 +268,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
                 label="Proposed Changes"
                 value={<ConfigValuesChanges changes={proposalDetails.proposal.configChanges} />}
               />
-              <JsonDiffAccordion>
+              <JsonDiffAccordion variant="review">
                 {dsoConfigToCompareWith?.[1] ? (
                   <PrettyJsonDiff
                     changes={{
