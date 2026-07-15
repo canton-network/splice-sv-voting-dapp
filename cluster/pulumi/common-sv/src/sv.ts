@@ -280,7 +280,7 @@ export async function installSvNode(
     prefix: baseConfig.identitiesBackupLocation.prefix || `${CLUSTER_BASENAME}/${xns.logicalName}`,
   };
 
-  const bulkStorageBucket = svConfig.scanApp?.bulkStorage
+  const bulkStorageBuckets = svConfig.scanApp?.bulkStorage
     ? installScanBulkStorage(xns, svConfig.scanApp.bulkStorage)
     : undefined;
 
@@ -288,7 +288,7 @@ export async function installSvNode(
     ...baseConfig,
     periodicBackupConfig,
     identitiesBackupLocation,
-    bulkStorageBucket,
+    bulkStorageBuckets,
   };
 
   const identitiesBackupConfigSecret = installBucketSecret(
@@ -338,7 +338,16 @@ export async function installSvNode(
         ? svCometBftGovernanceKeySecret(xns, config.cometBftGovernanceKey)
         : []
     )
-    .concat(bulkStorageBucket ? [bulkStorageBucket.secret, bulkStorageBucket.bucket] : [])
+    .concat(
+      bulkStorageBuckets
+        ? [
+            bulkStorageBuckets.staging.secret,
+            bulkStorageBuckets.staging.bucket,
+            bulkStorageBuckets.committed.secret,
+            bulkStorageBuckets.committed.bucket,
+          ]
+        : []
+    )
     .concat(extraDependsOn);
 
   const defaultPostgres = config.splitPostgresInstances
@@ -718,14 +727,20 @@ function installScan(
     logAsyncFlush: config.logging?.appsAsync,
     additionalEnvVars: config.scanApp?.additionalEnvVars || [],
     resources: config.scanApp?.resources,
-    ...(config.bulkStorageBucket
+    ...(config.bulkStorageBuckets
       ? {
           bulkStorage: {
-            s3: {
-              region: config.bulkStorageBucket.region,
-              bucketName: config.bulkStorageBucket.bucket.name,
+            staging: {
+              region: config.bulkStorageBuckets.staging.region,
+              bucketName: config.bulkStorageBuckets.staging.bucket.name,
               endpoint: 'https://storage.googleapis.com', // gcs endpoint for s3
-              secretName: config.bulkStorageBucket.secret.metadata.name,
+              secretName: config.bulkStorageBuckets.staging.secret.metadata.name,
+            },
+            committed: {
+              region: config.bulkStorageBuckets.committed.region,
+              bucketName: config.bulkStorageBuckets.committed.bucket.name,
+              endpoint: 'https://storage.googleapis.com', // gcs endpoint for s3
+              secretName: config.bulkStorageBuckets.committed.secret.metadata.name,
             },
           },
         }
