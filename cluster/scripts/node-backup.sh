@@ -274,6 +274,18 @@ function main() {
   local migration_id=$3
   local requested_component="${4:-}"
 
+  local config
+  config=$(get_resolved_config)
+
+  # Determine whether the BFT sequencer is enabled for the migration being backed up.
+  local bft_sequencer_enabled
+  bft_sequencer_enabled=$(echo "$config" | yq "
+    ([.synchronizerMigration.active, .synchronizerMigration.upgrade, .synchronizerMigration.legacy]
+      + (.synchronizerMigration.archived // [])
+      + (.synchronizerMigration.additionalLegacy // []))
+    | map(select(.id == $migration_id))
+    | .[0].sequencer.enableBftSequencer // false")
+
   # TODO(#9361): support multiple domains / non-default-ID'd ones
   if [ "$1" == "validator" ]; then
     _info "Backing up validator $namespace"
@@ -288,7 +300,11 @@ function main() {
     backup_component "$namespace" "cn-apps" "$requested_component" "$migration_id"
     backup_component "$namespace" "mediator" "$requested_component" "$migration_id"
     backup_component "$namespace" "sequencer" "$requested_component" "$migration_id"
-    backup_component "$namespace" "cometbft-$migration_id" "$requested_component" "$migration_id"
+    if [ "$bft_sequencer_enabled" == "true" ]; then
+      _info "BFT sequencer is enabled for migration $migration_id, skipping CometBFT backup"
+    else
+      backup_component "$namespace" "cometbft-$migration_id" "$requested_component" "$migration_id"
+    fi
 
     wait_for_backup "$namespace" "cn-apps" "$requested_component" "$migration_id"
 
@@ -298,7 +314,9 @@ function main() {
     wait_for_backup "$namespace" "participant" "$requested_component" "$migration_id"
     wait_for_backup "$namespace" "mediator" "$requested_component" "$migration_id"
     wait_for_backup "$namespace" "sequencer" "$requested_component" "$migration_id"
-    wait_for_backup "$namespace" "cometbft-$migration_id" "$requested_component" "$migration_id"
+    if [ "$bft_sequencer_enabled" != "true" ]; then
+      wait_for_backup "$namespace" "cometbft-$migration_id" "$requested_component" "$migration_id"
+    fi
   else
     usage
     exit 1
