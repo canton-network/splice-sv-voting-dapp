@@ -10,6 +10,7 @@ import {
   theme,
   SvClientProvider,
 } from '@canton-network/splice-common-frontend';
+import { ScanClientProvider } from '@canton-network/splice-common-frontend/scan-api';
 import { replaceEqualDeep } from '@canton-network/splice-common-frontend-utils';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
@@ -29,6 +30,9 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 
 import { SvAdminClientProvider } from './contexts/SvAdminServiceContext';
 import { SvAppVotesHooksProvider } from './contexts/SvAppVotesHooksContext';
+import { DappSvAdminClientProvider } from './dapp/DappSvAdminClientProvider';
+import { WalletSessionProvider } from './dapp/WalletSessionContext';
+import { useDappModeConfig } from './utils';
 import AmuletPrice from './routes/amuletPrice';
 import AuthCheck from './routes/authCheck';
 import Dso from './routes/dso';
@@ -43,6 +47,7 @@ import DelegateElection from './routes/delegateElection';
 
 const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
   const config = useSvConfig();
+  const dappMode = useDappModeConfig();
   const refetchInterval = useConfigPollInterval();
   const navigate = useNavigate();
 
@@ -56,6 +61,18 @@ const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
     },
   });
 
+  // In dApp mode the SV backend is not used: reads come from Scan and
+  // submissions go through the CIP-103 wallet gateway.
+  const adminClientProvider = dappMode ? (
+    <ScanClientProvider baseScanUrl={dappMode.scanUrl}>
+      <WalletSessionProvider>
+        <DappSvAdminClientProvider>{children}</DappSvAdminClientProvider>
+      </WalletSessionProvider>
+    </ScanClientProvider>
+  ) : (
+    <SvAdminClientProvider url={config.services.sv.url}>{children}</SvAdminClientProvider>
+  );
+
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <AuthProvider authConf={config.auth} redirect={(path: string) => navigate(path)}>
@@ -63,11 +80,7 @@ const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
           <ReactQueryDevtools initialIsOpen={false} />
           <UserProvider authConf={config.auth} testAuthConf={config.testAuth}>
             <SvClientProvider url={config.services.sv.url}>
-              <SvAppVotesHooksProvider>
-                <SvAdminClientProvider url={config.services.sv.url}>
-                  {children}
-                </SvAdminClientProvider>
-              </SvAppVotesHooksProvider>
+              <SvAppVotesHooksProvider>{adminClientProvider}</SvAppVotesHooksProvider>
             </SvClientProvider>
           </UserProvider>
         </QueryClientProvider>

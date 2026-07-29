@@ -134,5 +134,4 @@ export const getDappModeConfig = (config: SvConfig): DappModeConfig | undefined 
  * The dApp-mode config, or undefined in standard mode. The mode is fixed for
  * the lifetime of the page (config is loaded once from window.splice_config).
  */
-export const useDappModeConfig = (): DappModeConfig | undefined =>
-  getDappModeConfig(useSvConfig());
+export const useDappModeConfig = (): DappModeConfig | undefined => getDappModeConfig(useSvConfig());
