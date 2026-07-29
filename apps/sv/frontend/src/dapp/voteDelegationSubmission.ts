@@ -1,6 +1,5 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { ErrorCode } from '@canton-network/dapp-sdk';
 import * as scanOpenapi from '@canton-network/scan-openapi';
 
 import { RelTime } from '@daml.js/daml-stdlib-DA-Time-Types-1.0.0/lib/DA/Time/Types/module';
@@ -32,12 +31,15 @@ export class SignatureRejectedError extends Error {
   }
 }
 
-function isUserCancelled(error: unknown): boolean {
+async function isUserCancelled(error: unknown): Promise<boolean> {
   if (error instanceof SignatureRejectedError) {
     return true;
   }
   if (typeof error === 'object' && error !== null && 'code' in error) {
     const code = (error as { code: unknown }).code;
+    // Dynamic import keeps the SDK out of the standard-mode bundle; by the
+    // time a wallet error surfaces the module is already loaded and cached.
+    const { ErrorCode } = await import('@canton-network/dapp-sdk');
     if (code === ErrorCode.UserCancelled || code === 'signature_rejected') {
       return true;
     }
@@ -49,8 +51,8 @@ function isUserCancelled(error: unknown): boolean {
   return false;
 }
 
-const mapWalletError = (error: unknown): Error => {
-  if (isUserCancelled(error)) {
+const mapWalletError = async (error: unknown): Promise<Error> => {
+  if (await isUserCancelled(error)) {
     return new SignatureRejectedError(
       error instanceof Error ? error.message : 'Signature rejected or cancelled in the wallet'
     );
@@ -227,7 +229,7 @@ export function createVoteDelegationSubmission(
       try {
         await sdkClient.prepareExecuteAndWait(params);
       } catch (error) {
-        throw mapWalletError(error);
+        throw await mapWalletError(error);
       }
     },
 
@@ -262,7 +264,7 @@ export function createVoteDelegationSubmission(
       try {
         await sdkClient.prepareExecuteAndWait(params);
       } catch (error) {
-        throw mapWalletError(error);
+        throw await mapWalletError(error);
       }
     },
   };

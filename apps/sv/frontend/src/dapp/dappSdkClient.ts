@@ -1,19 +1,23 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import {
+import type {
+  AccountsChangedEvent,
+  ConnectResult,
   DappSDK,
-  RemoteAdapter,
-  type AccountsChangedEvent,
-  type ConnectResult,
-  type ListAccountsResult,
-  type PrepareExecuteAndWaitResult,
-  type PrepareExecuteParams,
+  ListAccountsResult,
+  PrepareExecuteAndWaitResult,
+  PrepareExecuteParams,
 } from '@canton-network/dapp-sdk';
 
 /**
  * Narrow facade over `@canton-network/dapp-sdk` (CIP-103) used by dApp mode.
  * All wallet-gateway interaction goes through this module so tests can mock a
  * single seam.
+ *
+ * The SDK is loaded lazily via a dynamic import: standard mode must never pull
+ * wallet code (and its transitive Lit dependency) into the page — Lit logs a
+ * dev-mode console warning that trips the strict console assertions in the
+ * frontend integration tests, and the SDK is dead weight without a wallet.
  */
 export interface DappSdkClient {
   readonly walletGatewayUrl: string;
@@ -28,13 +32,14 @@ export interface DappSdkClient {
 }
 
 const createClient = (walletGatewayUrl: string): DappSdkClient => {
-  const sdk = new DappSDK();
-  let initPromise: Promise<void> | undefined;
+  let sdkPromise: Promise<DappSDK> | undefined;
 
-  const init = (): Promise<void> => {
-    if (!initPromise) {
-      initPromise = sdk
-        .init({
+  const getSdk = (): Promise<DappSDK> => {
+    if (!sdkPromise) {
+      sdkPromise = (async () => {
+        const { DappSDK, RemoteAdapter } = await import('@canton-network/dapp-sdk');
+        const sdk = new DappSDK();
+        await sdk.init({
           additionalAdapters: [
             new RemoteAdapter({
               rpcUrl: walletGatewayUrl,
@@ -42,44 +47,48 @@ const createClient = (walletGatewayUrl: string): DappSdkClient => {
               description: 'Configured via splice_config dappMode.walletGatewayUrl',
             }),
           ],
-        })
-        .then(() => undefined);
+        });
+        return sdk;
+      })();
     }
-    return initPromise;
+    return sdkPromise;
   };
 
   return {
     walletGatewayUrl,
-    init,
+    async init(): Promise<void> {
+      await getSdk();
+    },
     async connect(): Promise<ConnectResult> {
-      await init();
-      return sdk.connect();
+      return (await getSdk()).connect();
     },
     async disconnect(): Promise<void> {
-      await sdk.disconnect();
+      if (!sdkPromise) {
+        return;
+      }
+      await (await getSdk()).disconnect();
     },
     async isConnected(): Promise<ConnectResult> {
-      await init();
-      return sdk.isConnected();
+      return (await getSdk()).isConnected();
     },
     async listAccounts(): Promise<ListAccountsResult> {
-      await init();
-      return sdk.listAccounts();
+      return (await getSdk()).listAccounts();
     },
     async onAccountsChanged(listener: (accounts: AccountsChangedEvent) => void): Promise<void> {
-      await init();
-      sdk.onAccountsChanged(listener);
+      (await getSdk()).onAccountsChanged(listener);
     },
     async removeOnAccountsChanged(
       listener: (accounts: AccountsChangedEvent) => void
     ): Promise<void> {
-      sdk.removeOnAccountsChanged(listener);
+      if (!sdkPromise) {
+        return;
+      }
+      (await getSdk()).removeOnAccountsChanged(listener);
     },
     async prepareExecuteAndWait(
       params: PrepareExecuteParams
     ): Promise<PrepareExecuteAndWaitResult> {
-      await init();
-      return sdk.prepareExecuteAndWait(params);
+      return (await getSdk()).prepareExecuteAndWait(params);
     },
   };
 };
