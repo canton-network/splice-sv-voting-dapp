@@ -19,7 +19,7 @@ template VoteDelegation
   with
     dso : Party
     sv : Party
-    voterParty : Party
+    voterParty : Party -- ^ The party that can vote on behalf of the SV through the SV dApp.
   where
     signatory sv
     observer voterParty
