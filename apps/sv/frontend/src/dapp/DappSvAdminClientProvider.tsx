@@ -6,8 +6,9 @@ import React, { useMemo } from 'react';
 import { SvAdminClient, SvAdminContext } from '../contexts/SvAdminServiceContext';
 import { useDappModeConfig } from '../utils';
 import { useWalletSession } from './WalletSessionContext';
+import { getDappSdkClient } from './dappSdkClient';
 import { createDappSvAdminClient } from './dappSvAdminClient';
-import { DappModeUnsupportedError } from './dappSvAdminClient';
+import { createVoteDelegationSubmission } from './voteDelegationSubmission';
 
 /**
  * Provides the SvAdminClient interface backed by Scan reads and wallet-gateway
@@ -26,34 +27,38 @@ export const DappSvAdminClientProvider: React.FC<React.PropsWithChildren> = ({ c
   const { scanUrl, walletGatewayUrl, svPartyId, voteDelegationCid, dsoGovernancePackageName } =
     dappMode;
 
-  const client: SvAdminClient = useMemo(
-    () =>
-      createDappSvAdminClient({
-        scanClient,
-        dappMode: {
-          scanUrl,
-          walletGatewayUrl,
-          svPartyId,
-          voteDelegationCid,
-          dsoGovernancePackageName,
-        },
-        voterPartyId,
-        isWalletConnected,
-        submitCastVote: () => Promise.reject(new DappModeUnsupportedError('castVote')),
-        submitCreateVoteRequest: () =>
-          Promise.reject(new DappModeUnsupportedError('createVoteRequest')),
-      }),
-    [
-      scanClient,
+  const client: SvAdminClient = useMemo(() => {
+    const dappModeConfig = {
       scanUrl,
       walletGatewayUrl,
       svPartyId,
       voteDelegationCid,
       dsoGovernancePackageName,
+    };
+    const submission = createVoteDelegationSubmission({
+      scanClient,
+      sdkClient: getDappSdkClient(walletGatewayUrl),
+      dappMode: dappModeConfig,
+      getVoterPartyId: () => voterPartyId,
+    });
+    return createDappSvAdminClient({
+      scanClient,
+      dappMode: dappModeConfig,
       voterPartyId,
       isWalletConnected,
-    ]
-  );
+      submitCastVote: submission.submitCastVote,
+      submitCreateVoteRequest: submission.submitCreateVoteRequest,
+    });
+  }, [
+    scanClient,
+    scanUrl,
+    walletGatewayUrl,
+    svPartyId,
+    voteDelegationCid,
+    dsoGovernancePackageName,
+    voterPartyId,
+    isWalletConnected,
+  ]);
 
   return <SvAdminContext.Provider value={client}>{children}</SvAdminContext.Provider>;
 };
