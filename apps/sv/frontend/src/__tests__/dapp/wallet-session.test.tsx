@@ -89,6 +89,10 @@ describe('WalletSessionProvider', () => {
       expect(screen.getByTestId('wallet-status').textContent).toBe('disconnected')
     );
     expect(screen.getByTestId('wallet-party').textContent).toBe('');
+    // Regression: SDK >= 1.4 rejects event subscriptions without a connected
+    // session ("Not connected — call connect() first"), so no subscription
+    // may be attempted on a cold session.
+    expect(mocks.client.onAccountsChanged).not.toHaveBeenCalled();
   });
 
   test('bootstrap restores a persisted session and selects the primary wallet', async () => {
@@ -153,21 +157,41 @@ describe('WalletSessionProvider', () => {
     expect(mocks.client.disconnect).toHaveBeenCalled();
   });
 
-  test('accountsChanged events update the session', async () => {
+  test('accountsChanged events update the session once connected', async () => {
+    mocks.client.isConnected.mockResolvedValue({ isConnected: true, isNetworkConnected: true });
+    mocks.client.listAccounts.mockResolvedValue([testWallet('initial::party', true)]);
     renderSession();
-    await waitFor(() => expect(mocks.client.onAccountsChanged).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId('wallet-status').textContent).toBe('connected'));
+    expect(mocks.client.onAccountsChanged).toHaveBeenCalledTimes(1);
     const listener = mocks.client.onAccountsChanged.mock.calls[0][0] as (
       accounts: AccountsChangedEvent
     ) => void;
 
     act(() => listener([testWallet('rotated::party', true)]));
-    await waitFor(() => expect(screen.getByTestId('wallet-status').textContent).toBe('connected'));
-    expect(screen.getByTestId('wallet-party').textContent).toBe('rotated::party');
+    await waitFor(() =>
+      expect(screen.getByTestId('wallet-party').textContent).toBe('rotated::party')
+    );
 
     act(() => listener([]));
     await waitFor(() =>
       expect(screen.getByTestId('wallet-status').textContent).toBe('disconnected')
     );
+  });
+
+  test('connecting subscribes to account changes', async () => {
+    const user = userEvent.setup();
+    mocks.client.connect.mockResolvedValue({ isConnected: true, isNetworkConnected: true });
+    renderSession();
+    await waitFor(() =>
+      expect(screen.getByTestId('wallet-status').textContent).toBe('disconnected')
+    );
+    expect(mocks.client.onAccountsChanged).not.toHaveBeenCalled();
+
+    mocks.client.listAccounts.mockResolvedValue([testWallet('voter::party', true)]);
+    await user.click(screen.getByText('connect'));
+
+    await waitFor(() => expect(screen.getByTestId('wallet-status').textContent).toBe('connected'));
+    expect(mocks.client.onAccountsChanged).toHaveBeenCalledTimes(1);
   });
 });
 

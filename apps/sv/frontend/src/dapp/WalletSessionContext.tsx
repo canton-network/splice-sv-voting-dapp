@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import type { AccountsChangedEvent, Wallet } from '@canton-network/dapp-sdk';
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useDappModeConfig } from '../utils';
 import { getDappSdkClient } from './dappSdkClient';
@@ -59,9 +59,37 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
     setErrorMessage(undefined);
   }, []);
 
+  // The SDK only accepts event subscriptions while a session is connected
+  // (requireClient throws "Not connected" otherwise), so the accounts listener
+  // is registered after a restored session or a successful connect, and
+  // removed best-effort on teardown.
+  const accountsListenerRef = useRef<(accounts: AccountsChangedEvent) => void>(() => undefined);
+  const subscribedRef = useRef(false);
+
+  const ensureSubscribed = useCallback(async (): Promise<void> => {
+    if (subscribedRef.current) {
+      return;
+    }
+    try {
+      await client.onAccountsChanged(accountsListenerRef.current);
+      subscribedRef.current = true;
+    } catch {
+      // The session may have dropped between the connection check and the
+      // subscription; account updates are picked up on the next connect.
+    }
+  }, [client]);
+
+  const unsubscribe = useCallback((): void => {
+    if (!subscribedRef.current) {
+      return;
+    }
+    subscribedRef.current = false;
+    client.removeOnAccountsChanged(accountsListenerRef.current).catch(() => undefined);
+  }, [client]);
+
   useEffect(() => {
     let cancelled = false;
-    const listener = (accounts: AccountsChangedEvent): void => {
+    accountsListenerRef.current = (accounts: AccountsChangedEvent): void => {
       if (!cancelled) {
         applyAccounts(accounts);
       }
@@ -69,12 +97,12 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
     const bootstrap = async (): Promise<void> => {
       try {
         await client.init();
-        await client.onAccountsChanged(listener);
         const connection = await client.isConnected();
         if (cancelled) {
           return;
         }
         if (connection.isConnected) {
+          await ensureSubscribed();
           const accounts = await client.listAccounts();
           if (!cancelled) {
             applyAccounts(accounts);
@@ -92,9 +120,9 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
     void bootstrap();
     return () => {
       cancelled = true;
-      void client.removeOnAccountsChanged(listener);
+      unsubscribe();
     };
-  }, [client, applyAccounts]);
+  }, [client, applyAccounts, ensureSubscribed, unsubscribe]);
 
   const connect = useCallback(async (): Promise<void> => {
     setStatus('initializing');
@@ -107,13 +135,14 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
         setErrorMessage(result.reason ?? 'Wallet connection failed');
         return;
       }
+      await ensureSubscribed();
       applyAccounts(await client.listAccounts());
     } catch (error) {
       setVoterPartyId(undefined);
       setStatus('wallet_connection_failed');
       setErrorMessage(formatWalletError(error));
     }
-  }, [client, applyAccounts]);
+  }, [client, applyAccounts, ensureSubscribed]);
 
   const disconnect = useCallback(async (): Promise<void> => {
     try {
@@ -123,10 +152,11 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
       setErrorMessage(formatWalletError(error));
       return;
     }
+    unsubscribe();
     setVoterPartyId(undefined);
     setStatus('disconnected');
     setErrorMessage(undefined);
-  }, [client]);
+  }, [client, unsubscribe]);
 
   const session = useMemo<WalletSession>(
     () => ({ status, voterPartyId, errorMessage, connect, disconnect }),
