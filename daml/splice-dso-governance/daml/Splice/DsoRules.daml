@@ -862,7 +862,8 @@ template DsoRules with
       with
         requestCid : ContractId VoteRequest
         vote : Vote
-      controller vote.sv
+        voterParty : Optional Party
+      controller vote.sv, voterParty
       do
         -- validate vote parameters
         requireWellformedVote config vote

@@ -1049,6 +1049,7 @@ object SvApp {
                     reason,
                     Optional.empty(), // optCastAt
                   ),
+                  Optional.empty(), // voterParty
                 )
               )
               res <- dsoStoreWithIngestion

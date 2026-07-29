@@ -453,6 +453,7 @@ testRacingSvRemoval = do
   -- sv1 and sv2 accept both requests as well, so we can better test races
   [req1, req2, req3] <- forA [req1, req2, req3] $ \requestCid -> do
     result1 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+      voterParty = None
       requestCid
       vote = Vote with
         sv = sv1
@@ -460,6 +461,7 @@ testRacingSvRemoval = do
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
     result2 <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+      voterParty = None
       requestCid = result1.voteRequest
       vote = Vote with
         sv = sv2
@@ -467,6 +469,7 @@ testRacingSvRemoval = do
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
     result3 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+      voterParty = None
       requestCid = result2.voteRequest
       vote = Vote with
         sv = sv3
@@ -474,6 +477,7 @@ testRacingSvRemoval = do
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
     result4 <- submit (actAs sv4 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+      voterParty = None
       requestCid = result3.voteRequest
       vote = Vote with
         sv = sv4
@@ -582,6 +586,7 @@ testRacingSvRemoval = do
     voteRequestTimeout = Some (days 1)
 
   castResult <- submit (actAs sv4 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    voterParty = None
     requestCid = result5.voteRequest
     vote = Vote with
       sv = sv4
@@ -1126,6 +1131,7 @@ testVoteCastingCooldown  = do
 
   -- SV2 can immediately cast a vote
   result <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+    voterParty = None
     requestCid
     vote = Vote with
       sv = sv2
@@ -1136,6 +1142,7 @@ testVoteCastingCooldown  = do
 
   -- The second vote SV2 fails though
   _ <- submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+        voterParty = None
         requestCid
         vote = Vote with
           sv = sv2
@@ -1145,6 +1152,7 @@ testVoteCastingCooldown  = do
 
   -- And that same holds for SV1, as it voted as part of creating the request.
   _ <- submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+        voterParty = None
         requestCid
         vote = Vote with
           sv = sv1
@@ -1157,6 +1165,7 @@ testVoteCastingCooldown  = do
 
   -- The second vote SV2 fails though
   result <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+        voterParty = None
         requestCid
         vote = Vote with
           sv = sv2
@@ -1167,6 +1176,7 @@ testVoteCastingCooldown  = do
 
   -- And that same holds for SV1, as it voted as part of creating the request.
   _ <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
+        voterParty = None
         requestCid
         vote = Vote with
           sv = sv1
@@ -1271,17 +1281,24 @@ testVoteDelegationCastVote = do
     sv = sv2
     voterParty
 
-  -- voterParty casts sv2's vote through the delegation
-  result <- submit (actAs voterParty <> readAs dso) $
-    exerciseCmd delegationCid Delegation.VoteDelegation_CastVote with
-      dsoRulesCid
-      castVote = DsoRules_CastVote with
+  let castVote = DsoRules_CastVote with
         requestCid = requested.voteRequest
+        voterParty = Some voterParty
         vote = Vote with
           sv = sv2
           accept = True
           reason = Reason with url = ""; body = "delegated cast"
           optCastAt = None
+
+  -- the voter party cannot exercise the choice directly, only via the delegation
+  submitMustFail (actAs voterParty <> readAs dso) $
+    exerciseCmd dsoRulesCid castVote
+
+  -- voterParty casts sv2's vote through the delegation
+  result <- submit (actAs voterParty <> readAs dso) $
+    exerciseCmd delegationCid Delegation.VoteDelegation_CastVote with
+      dsoRulesCid
+      castVote
 
   [(voteRequestCid, _)] <- query @VoteRequest dso
   voteRequestCid === result.voteRequest
@@ -1378,8 +1395,49 @@ testVoteDelegationCastVoteRejectsWrongSv = do
       dsoRulesCid
       castVote = DsoRules_CastVote with
         requestCid = requested.voteRequest
+        voterParty = Some voterParty
         vote = Vote with
           sv = sv2
           accept = True
           reason = Reason with url = ""; body = "delegated cast"
           optCastAt = None
+
+testVoteDelegationCastVoteRejectsWrongVoterParty : Script ()
+testVoteDelegationCastVoteRejectsWrongVoterParty = do
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  provider <- allocateParty "provider"
+  voterParty <- allocateParty "voterParty"
+
+  -- an open vote request that sv2 will vote on
+  requested <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv1
+    voterParty = None
+    action = ARC_DsoRules with
+      dsoAction = SRARC_GrantFeaturedAppRight DsoRules_GrantFeaturedAppRight with
+        provider
+        activityWeight = None
+    reason = Reason with url = ""; body = "request"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 7)
+
+  delegationCid <- submit sv2 $ createCmd Delegation.VoteDelegation with
+    dso
+    sv = sv2
+    voterParty
+
+  let mkCastVote voter = DsoRules_CastVote with
+        requestCid = requested.voteRequest
+        voterParty = voter
+        vote = Vote with
+          sv = sv2
+          accept = True
+          reason = Reason with url = ""; body = "delegated cast"
+          optCastAt = None
+
+  -- a delegated cast that does not carry this delegation's voter party is rejected
+  submitMustFail (actAs voterParty <> readAs dso) $
+    exerciseCmd delegationCid Delegation.VoteDelegation_CastVote with
+      dsoRulesCid
+      castVote = mkCastVote None

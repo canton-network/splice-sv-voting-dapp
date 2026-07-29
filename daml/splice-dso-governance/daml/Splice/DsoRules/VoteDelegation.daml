@@ -43,6 +43,7 @@ template VoteDelegation
       controller voterParty
       do
         require "Delegated vote is cast on behalf of the delegating SV" (castVote.vote.sv == sv)
+        require "Delegated vote carries this delegation's voter party" (castVote.voterParty == Some voterParty)
         fetchPublicReferenceData (ForDso dso) dsoRulesCid (DsoRules_Fetch with p = voterParty)
         result <- exercise dsoRulesCid castVote
         pure VoteDelegation_CastVoteResult with voteRequest = result.voteRequest
