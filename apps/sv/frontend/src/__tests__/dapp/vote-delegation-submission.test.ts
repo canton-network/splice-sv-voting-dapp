@@ -20,7 +20,7 @@ const SV_PARTY = 'Delegating-SV::1220aa';
 
 const dappMode: DappModeConfig = {
   scanUrl: 'http://scan.localhost:4000/api/scan',
-  walletGatewayUrl: 'http://localhost:3030/api/v0/dapp',
+  cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
   svPartyId: SV_PARTY,
   voteDelegationCid: '00votedelegation',
   dsoGovernancePackageName: 'splice-dso-governance',

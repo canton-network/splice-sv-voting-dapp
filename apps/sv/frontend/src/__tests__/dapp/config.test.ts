@@ -28,17 +28,17 @@ describe('dappMode config schema', () => {
     const parsed = parse({
       enabled: '',
       scanUrl: '',
-      walletGatewayUrl: '',
+      cip103RpcUrl: '',
       svPartyId: '',
       voteDelegationCid: '',
     });
     expect(getDappModeConfig(parsed)).toBeUndefined();
   });
 
-  test('enabled dappMode requires scanUrl and walletGatewayUrl', () => {
+  test('enabled dappMode requires scanUrl and cip103RpcUrl', () => {
     expect(() => parse({ enabled: true })).toThrow(/scanUrl/);
     expect(() => parse({ enabled: true, scanUrl: 'http://scan.localhost:4000/api/scan' })).toThrow(
-      /walletGatewayUrl/
+      /cip103RpcUrl/
     );
   });
 
@@ -46,14 +46,14 @@ describe('dappMode config schema', () => {
     const parsed = parse({
       enabled: true,
       scanUrl: 'http://scan.localhost:4000/api/scan',
-      walletGatewayUrl: 'http://localhost:3030/api/v0/dapp',
+      cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
       svPartyId: 'DSO-SV-1::1220deadbeef',
       voteDelegationCid: '00delegation',
     });
     const dappMode = getDappModeConfig(parsed);
     expect(dappMode).toBeDefined();
     expect(dappMode?.scanUrl).toBe('http://scan.localhost:4000/api/scan');
-    expect(dappMode?.walletGatewayUrl).toBe('http://localhost:3030/api/v0/dapp');
+    expect(dappMode?.cip103RpcUrl).toBe('http://localhost:3030/api/v0/dapp');
     expect(dappMode?.svPartyId).toBe('DSO-SV-1::1220deadbeef');
     expect(dappMode?.voteDelegationCid).toBe('00delegation');
     expect(dappMode?.dsoGovernancePackageName).toBe('splice-dso-governance');
@@ -63,7 +63,7 @@ describe('dappMode config schema', () => {
     const parsed = parse({
       enabled: 'true',
       scanUrl: 'http://scan.localhost:4000/api/scan',
-      walletGatewayUrl: 'http://localhost:3030/api/v0/dapp',
+      cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
       dsoGovernancePackageName: 'splice-dso-governance-dev',
     });
     const dappMode = getDappModeConfig(parsed);
@@ -77,7 +77,7 @@ describe('dappMode config schema', () => {
     const parsed = parse({
       enabled: 'false',
       scanUrl: 'http://scan.localhost:4000/api/scan',
-      walletGatewayUrl: 'http://localhost:3030/api/v0/dapp',
+      cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
     });
     expect(getDappModeConfig(parsed)).toBeUndefined();
   });

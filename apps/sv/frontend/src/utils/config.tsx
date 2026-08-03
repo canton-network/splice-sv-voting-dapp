@@ -17,8 +17,8 @@ type SvServicesConfig = {
   sv: z.infer<typeof serviceSchema>;
 };
 
-// When enabled, the SV app runs backend-less: login goes through the CIP-103
-// wallet gateway, governance reads come from Scan, and vote submissions are
+// When enabled, the SV app runs backend-less: login goes through a CIP-103
+// RPC endpoint, governance reads come from Scan, and vote submissions are
 // exercised on a VoteDelegation contract through the dApp API.
 // Values may arrive as env-substituted strings (docker config.js template), so
 // `enabled` is parsed leniently: only the boolean true or the string 'true'
@@ -31,8 +31,8 @@ export const dappModeSchema = z
       .transform(value => value === true || value === 'true'),
     // Scan API base URL, e.g. http://scan.localhost:4000/api/scan
     scanUrl: z.string().optional(),
-    // CIP-103 wallet gateway dApp API URL, e.g. http://localhost:3030/api/v0/dapp
-    walletGatewayUrl: z.string().optional(),
+    // CIP-103 dApp RPC URL (wallet gateway or partner wallet), e.g. http://localhost:3030/api/v0/dapp
+    cip103RpcUrl: z.string().optional(),
     // The delegating SV party. Falls back to Scan /v0/dso sv_party_id when unset.
     svPartyId: z.string().optional(),
     // Contract id of the VoteDelegation authorizing the wallet party to vote.
@@ -51,11 +51,11 @@ export const dappModeSchema = z
         message: 'dappMode.scanUrl is required when dappMode is enabled',
       });
     }
-    if (!value.walletGatewayUrl?.trim()) {
+    if (!value.cip103RpcUrl?.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['walletGatewayUrl'],
-        message: 'dappMode.walletGatewayUrl is required when dappMode is enabled',
+        path: ['cip103RpcUrl'],
+        message: 'dappMode.cip103RpcUrl is required when dappMode is enabled',
       });
     }
   })
@@ -107,7 +107,7 @@ const DEFAULT_DSO_GOVERNANCE_PACKAGE_NAME = 'splice-dso-governance';
 /** Normalized dApp-mode settings; defined only when the mode is enabled and usable. */
 export interface DappModeConfig {
   scanUrl: string;
-  walletGatewayUrl: string;
+  cip103RpcUrl: string;
   svPartyId?: string;
   voteDelegationCid?: string;
   dsoGovernancePackageName: string;
@@ -116,13 +116,13 @@ export interface DappModeConfig {
 export const getDappModeConfig = (config: SvConfig): DappModeConfig | undefined => {
   const dappMode = config.dappMode;
   const scanUrl = dappMode?.scanUrl?.trim();
-  const walletGatewayUrl = dappMode?.walletGatewayUrl?.trim();
-  if (!dappMode?.enabled || !scanUrl || !walletGatewayUrl) {
+  const cip103RpcUrl = dappMode?.cip103RpcUrl?.trim();
+  if (!dappMode?.enabled || !scanUrl || !cip103RpcUrl) {
     return undefined;
   }
   return {
     scanUrl,
-    walletGatewayUrl,
+    cip103RpcUrl,
     svPartyId: dappMode.svPartyId?.trim() || undefined,
     voteDelegationCid: dappMode.voteDelegationCid?.trim() || undefined,
     dsoGovernancePackageName:

@@ -32,7 +32,7 @@ const WalletSessionContext = React.createContext<WalletSession | undefined>(unde
 
 /**
  * dApp-mode wallet session: initializes the CIP-103 SDK against the configured
- * wallet gateway, restores a persisted session on mount, and tracks the
+ * RPC endpoint, restores a persisted session on mount, and tracks the
  * connected voter party. Mounted only when dApp mode is enabled.
  */
 export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
@@ -40,8 +40,8 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
   if (!dappMode) {
     throw new Error('WalletSessionProvider requires dappMode to be enabled in the app config');
   }
-  const walletGatewayUrl = dappMode.walletGatewayUrl;
-  const client = useMemo(() => getDappSdkClient(walletGatewayUrl), [walletGatewayUrl]);
+  const cip103RpcUrl = dappMode.cip103RpcUrl;
+  const client = useMemo(() => getDappSdkClient(cip103RpcUrl), [cip103RpcUrl]);
 
   const [status, setStatus] = useState<WalletConnectionStatus>('initializing');
   const [voterPartyId, setVoterPartyId] = useState<string | undefined>(undefined);

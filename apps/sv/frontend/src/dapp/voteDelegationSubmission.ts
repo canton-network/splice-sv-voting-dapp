@@ -117,7 +117,7 @@ export interface VoteDelegationSubmission {
 }
 
 /**
- * Governance submissions through the CIP-103 wallet gateway, exercising the
+ * Governance submissions through the CIP-103 dApp API, exercising the
  * VoteDelegation contract as the connected wallet party.
  */
 export function createVoteDelegationSubmission(

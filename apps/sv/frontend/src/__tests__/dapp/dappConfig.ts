@@ -4,7 +4,7 @@
 import { config as baseConfig } from '../setup/config';
 
 export const dappScanUrl = 'http://scan.localhost:4000/api/scan';
-export const dappWalletGatewayUrl = 'http://localhost:3030/api/v0/dapp';
+export const dappCip103RpcUrl = 'http://localhost:3030/api/v0/dapp';
 export const dappSvPartyId =
   'Digital-Asset-2::1220ed548efbcc22bb5097bd5a98303d1d64ab519f9568cdc1676ef1630da1fa6832';
 export const dappVoterPartyId = 'delegated-voter::1220aa00bb11cc22dd33ee44ff55';
@@ -14,7 +14,7 @@ export const dappVoteDelegationCid =
 export const dappModeBlock = {
   enabled: true,
   scanUrl: dappScanUrl,
-  walletGatewayUrl: dappWalletGatewayUrl,
+  cip103RpcUrl: dappCip103RpcUrl,
   svPartyId: dappSvPartyId,
   voteDelegationCid: dappVoteDelegationCid,
 };

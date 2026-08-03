@@ -24,7 +24,7 @@ import { DappWrapper } from './helpers';
 
 const mocks = vi.hoisted(() => {
   const client = {
-    walletGatewayUrl: 'http://localhost:3030/api/v0/dapp',
+    cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
     init: vi.fn(async () => undefined),
     connect: vi.fn(),
     disconnect: vi.fn(async () => undefined),

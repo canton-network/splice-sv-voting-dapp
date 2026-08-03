@@ -11,7 +11,7 @@ import { createDappSvAdminClient } from './dappSvAdminClient';
 import { createVoteDelegationSubmission } from './voteDelegationSubmission';
 
 /**
- * Provides the SvAdminClient interface backed by Scan reads and wallet-gateway
+ * Provides the SvAdminClient interface backed by Scan reads and CIP-103
  * submissions. Mounted in place of SvAdminClientProvider when dApp mode is on,
  * so the governance UI works unchanged.
  */
@@ -24,20 +24,20 @@ export const DappSvAdminClientProvider: React.FC<React.PropsWithChildren> = ({ c
   const walletSession = useWalletSession();
   const voterPartyId = walletSession.voterPartyId;
   const isWalletConnected = walletSession.status === 'connected';
-  const { scanUrl, walletGatewayUrl, svPartyId, voteDelegationCid, dsoGovernancePackageName } =
+  const { scanUrl, cip103RpcUrl, svPartyId, voteDelegationCid, dsoGovernancePackageName } =
     dappMode;
 
   const client: SvAdminClient = useMemo(() => {
     const dappModeConfig = {
       scanUrl,
-      walletGatewayUrl,
+      cip103RpcUrl,
       svPartyId,
       voteDelegationCid,
       dsoGovernancePackageName,
     };
     const submission = createVoteDelegationSubmission({
       scanClient,
-      sdkClient: getDappSdkClient(walletGatewayUrl),
+      sdkClient: getDappSdkClient(cip103RpcUrl),
       dappMode: dappModeConfig,
       getVoterPartyId: () => voterPartyId,
     });
@@ -52,7 +52,7 @@ export const DappSvAdminClientProvider: React.FC<React.PropsWithChildren> = ({ c
   }, [
     scanClient,
     scanUrl,
-    walletGatewayUrl,
+    cip103RpcUrl,
     svPartyId,
     voteDelegationCid,
     dsoGovernancePackageName,

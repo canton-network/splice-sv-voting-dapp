@@ -75,7 +75,7 @@ window.splice_config = {
     // Scan API base URL.
     scanUrl: 'http://scan.localhost:4000/api/scan',
     // CIP-103 dApp RPC URL (reference wallet gateway or any CIP-103 endpoint).
-    walletGatewayUrl: 'http://localhost:3030/api/v0/dapp',
+    cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
     // The delegating SV party (Vote.sv / requester). Falls back to the
     // sv_party_id reported by Scan /v0/dso when unset.
     svPartyId: '<sv party id>',
@@ -95,7 +95,7 @@ unaffected):
 | --- | --- |
 | `SPLICE_APP_UI_DAPP_MODE_ENABLED` | Set to `true` to enable dApp mode |
 | `SPLICE_APP_UI_DAPP_MODE_SCAN_URL` | Scan API base URL |
-| `SPLICE_APP_UI_DAPP_MODE_WALLET_GATEWAY_URL` | CIP-103 dApp RPC URL |
+| `SPLICE_APP_UI_DAPP_MODE_CIP103_RPC_URL` | CIP-103 dApp RPC URL |
 | `SPLICE_APP_UI_DAPP_MODE_SV_PARTY_ID` | Delegating SV party (optional; falls back to Scan) |
 | `SPLICE_APP_UI_DAPP_MODE_VOTE_DELEGATION_CID` | `VoteDelegation` contract id |
 

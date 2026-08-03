@@ -4,6 +4,8 @@ import type {
   AccountsChangedEvent,
   ConnectResult,
   DappSDK,
+  LedgerApiParams,
+  LedgerApiResult,
   ListAccountsResult,
   PrepareExecuteAndWaitResult,
   PrepareExecuteParams,
@@ -11,7 +13,7 @@ import type {
 
 /**
  * Narrow facade over `@canton-network/dapp-sdk` (CIP-103) used by dApp mode.
- * All wallet-gateway interaction goes through this module so tests can mock a
+ * All CIP-103 RPC interaction goes through this module so tests can mock a
  * single seam.
  *
  * The SDK is loaded lazily via a dynamic import: standard mode must never pull
@@ -20,7 +22,7 @@ import type {
  * frontend integration tests, and the SDK is dead weight without a wallet.
  */
 export interface DappSdkClient {
-  readonly walletGatewayUrl: string;
+  readonly cip103RpcUrl: string;
   init(): Promise<void>;
   connect(): Promise<ConnectResult>;
   disconnect(): Promise<void>;
@@ -29,9 +31,10 @@ export interface DappSdkClient {
   onAccountsChanged(listener: (accounts: AccountsChangedEvent) => void): Promise<void>;
   removeOnAccountsChanged(listener: (accounts: AccountsChangedEvent) => void): Promise<void>;
   prepareExecuteAndWait(params: PrepareExecuteParams): Promise<PrepareExecuteAndWaitResult>;
+  ledgerApi(params: LedgerApiParams): Promise<LedgerApiResult>;
 }
 
-const createClient = (walletGatewayUrl: string): DappSdkClient => {
+const createClient = (cip103RpcUrl: string): DappSdkClient => {
   let sdkPromise: Promise<DappSDK> | undefined;
 
   const getSdk = (): Promise<DappSDK> => {
@@ -42,9 +45,9 @@ const createClient = (walletGatewayUrl: string): DappSdkClient => {
         await sdk.init({
           additionalAdapters: [
             new RemoteAdapter({
-              rpcUrl: walletGatewayUrl,
-              name: 'Wallet Gateway',
-              description: 'Configured via splice_config dappMode.walletGatewayUrl',
+              rpcUrl: cip103RpcUrl,
+              name: 'CIP-103 RPC',
+              description: 'Configured via splice_config dappMode.cip103RpcUrl',
             }),
           ],
         });
@@ -55,7 +58,7 @@ const createClient = (walletGatewayUrl: string): DappSdkClient => {
   };
 
   return {
-    walletGatewayUrl,
+    cip103RpcUrl,
     async init(): Promise<void> {
       await getSdk();
     },
@@ -90,15 +93,18 @@ const createClient = (walletGatewayUrl: string): DappSdkClient => {
     ): Promise<PrepareExecuteAndWaitResult> {
       return (await getSdk()).prepareExecuteAndWait(params);
     },
+    async ledgerApi(params: LedgerApiParams): Promise<LedgerApiResult> {
+      return (await getSdk()).ledgerApi(params);
+    },
   };
 };
 
 let singleton: DappSdkClient | undefined;
 
-/** App-wide client for the configured wallet gateway (one gateway per page load). */
-export function getDappSdkClient(walletGatewayUrl: string): DappSdkClient {
-  if (!singleton || singleton.walletGatewayUrl !== walletGatewayUrl) {
-    singleton = createClient(walletGatewayUrl);
+/** App-wide client for the configured CIP-103 RPC endpoint (one per page load). */
+export function getDappSdkClient(cip103RpcUrl: string): DappSdkClient {
+  if (!singleton || singleton.cip103RpcUrl !== cip103RpcUrl) {
+    singleton = createClient(cip103RpcUrl);
   }
   return singleton;
 }

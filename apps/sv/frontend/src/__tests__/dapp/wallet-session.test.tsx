@@ -15,7 +15,7 @@ import { disableDappModeConfig, enableDappModeConfig } from './dappConfig';
 
 const mocks = vi.hoisted(() => {
   const client = {
-    walletGatewayUrl: 'http://localhost:3030/api/v0/dapp',
+    cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
     init: vi.fn(),
     connect: vi.fn(),
     disconnect: vi.fn(),
