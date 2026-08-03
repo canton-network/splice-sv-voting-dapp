@@ -20,13 +20,13 @@ type SvServicesConfig = {
 // When enabled, the SV app runs backend-less: login goes through a CIP-103
 // RPC endpoint, governance reads come from Scan, and vote submissions are
 // exercised on a VoteDelegation contract through the dApp API.
-// Values may arrive as env-substituted strings (docker config.js template), so
-// `enabled` is parsed leniently: only the boolean true or the string 'true'
-// turn the mode on.
+// Values may arrive as env-substituted strings (docker config.js template).
+// enabled accepts true/'true' (on) or false/'false'/''/absent (off); other
+// strings are rejected at parse time so typos do not silently disable the mode.
 export const dappModeSchema = z
   .object({
     enabled: z
-      .union([z.boolean(), z.string()])
+      .union([z.boolean(), z.enum(['true', 'false', ''])])
       .optional()
       .transform(value => value === true || value === 'true'),
     // Scan API base URL, e.g. http://scan.localhost:4000/api/scan
@@ -107,16 +107,18 @@ export interface DappModeConfig {
   dsoGovernancePackageName: string;
 }
 
+/**
+ * Pure normalizer over a successfully parsed config. Validity of scanUrl /
+ * cip103RpcUrl when enabled is decided solely by dappModeSchema.superRefine.
+ */
 export const getDappModeConfig = (config: SvConfig): DappModeConfig | undefined => {
   const dappMode = config.dappMode;
-  const scanUrl = dappMode?.scanUrl?.trim();
-  const cip103RpcUrl = dappMode?.cip103RpcUrl?.trim();
-  if (!dappMode?.enabled || !scanUrl || !cip103RpcUrl) {
+  if (!dappMode?.enabled) {
     return undefined;
   }
   return {
-    scanUrl,
-    cip103RpcUrl,
+    scanUrl: dappMode.scanUrl!.trim(),
+    cip103RpcUrl: dappMode.cip103RpcUrl!.trim(),
     dsoGovernancePackageName:
       dappMode.dsoGovernancePackageName?.trim() || DEFAULT_DSO_GOVERNANCE_PACKAGE_NAME,
   };

@@ -69,20 +69,23 @@ Add a `dappMode` block to `window.splice_config` (see
 
 ```js
 window.splice_config = {
-  // auth and services.sv are still required by the config schema, but they
-  // are not used while dApp mode is enabled.
+  // auth and services.sv remain required by the config schema. In dApp mode the
+  // OIDC AuthProvider is not mounted (no silent renew against a missing
+  // authority), and services.sv is unused — login is CIP-103 wallet connect.
   auth: { algorithm: 'hs-256-unsafe', secret: 'test', token_audience: 'https://sv.example.com' },
   services: { sv: { url: 'http://localhost:5014/api/sv' } },
   spliceInstanceNames: { /* ... */ },
 
   dappMode: {
-    // 'true' (or true) turns the mode on; anything else leaves standard mode.
+    // true / 'true' enables; false / 'false' / '' / absent disables.
+    // Other strings (e.g. '1', 'TRUE') are rejected at config parse.
     enabled: 'true',
     // Scan API base URL.
     scanUrl: 'http://scan.localhost:4000/api/scan',
     // CIP-103 dApp RPC URL (reference wallet gateway or any CIP-103 endpoint).
     cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
-    // Optional override of the Daml package name used in template ids.
+    // Optional override of the Daml package name used in template ids
+    // (hand-written config.js only; not exposed as an image env var).
     // dsoGovernancePackageName: 'splice-dso-governance',
   },
 };

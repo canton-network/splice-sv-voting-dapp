@@ -62,7 +62,7 @@ const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
   });
 
   // In dApp mode the SV backend is not used: reads come from Scan and
-  // submissions go through the CIP-103 wallet gateway.
+  // submissions go through the CIP-103 dApp API.
   const adminClientProvider = dappMode ? (
     <ScanClientProvider baseScanUrl={dappMode.scanUrl}>
       <WalletSessionProvider>
@@ -73,18 +73,29 @@ const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
     <SvAdminClientProvider url={config.services.sv.url}>{children}</SvAdminClientProvider>
   );
 
+  const appProviders = (
+    <QueryClientProvider client={queryClient}>
+      <ReactQueryDevtools initialIsOpen={false} />
+      <UserProvider authConf={config.auth} testAuthConf={config.testAuth}>
+        <SvClientProvider url={config.services.sv.url}>
+          <SvAppVotesHooksProvider>{adminClientProvider}</SvAppVotesHooksProvider>
+        </SvClientProvider>
+      </UserProvider>
+    </QueryClientProvider>
+  );
+
+  // dApp mode authenticates via CIP-103 wallet connect. Skip AuthProvider so
+  // oidc-client-ts automaticSilentRenew does not hit a missing authority
+  // (docker image auth is RS-256). UserProvider tolerates a missing OIDC context.
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <AuthProvider authConf={config.auth} redirect={(path: string) => navigate(path)}>
-        <QueryClientProvider client={queryClient}>
-          <ReactQueryDevtools initialIsOpen={false} />
-          <UserProvider authConf={config.auth} testAuthConf={config.testAuth}>
-            <SvClientProvider url={config.services.sv.url}>
-              <SvAppVotesHooksProvider>{adminClientProvider}</SvAppVotesHooksProvider>
-            </SvClientProvider>
-          </UserProvider>
-        </QueryClientProvider>
-      </AuthProvider>
+      {dappMode ? (
+        appProviders
+      ) : (
+        <AuthProvider authConf={config.auth} redirect={(path: string) => navigate(path)}>
+          {appProviders}
+        </AuthProvider>
+      )}
     </LocalizationProvider>
   );
 };

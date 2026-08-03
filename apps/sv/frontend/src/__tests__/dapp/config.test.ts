@@ -73,4 +73,21 @@ describe('dappMode config schema', () => {
     });
     expect(getDappModeConfig(parsed)).toBeUndefined();
   });
+
+  test('rejects unknown enabled strings instead of silently disabling', () => {
+    expect(() =>
+      parse({
+        enabled: '1',
+        scanUrl: 'http://scan.localhost:4000/api/scan',
+        cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
+      })
+    ).toThrow();
+    expect(() =>
+      parse({
+        enabled: 'TRUE',
+        scanUrl: 'http://scan.localhost:4000/api/scan',
+        cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
+      })
+    ).toThrow();
+  });
 });
