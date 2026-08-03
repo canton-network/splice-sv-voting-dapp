@@ -2,8 +2,7 @@
 
 This doc scopes the automated e2e work called out in
 [PR #19 review](https://github.com/canton-network/splice-sv-voting-dapp/pull/19#pullrequestreview-4843117996)
-("an end to end integration test that shows this working fully"). It is a plan
-only — **Tier A is not implemented in the current PR**.
+("an end to end integration test that shows this working fully").
 
 ## What "working fully" means
 
@@ -25,38 +24,27 @@ approval) is a separate, heavier layer; see Tier B.
 | --- | --- | --- |
 | Daml scripts | Choice semantics, mismatch / wrong-voter / wrong-SV rejects | `daml/splice-dso-governance-test/.../TestGovernance.daml` (`testVoteDelegationRequestVote`, `testVoteDelegationCastVote`, …) |
 | Vitest | Config, wallet login gate, Scan-backed reads, command builders, submission + disclosures (mocked `dappSdkClient`) | `apps/sv/frontend/src/__tests__/dapp/` |
+| Scala IntegrationTest (Tier A) | Cross-participant VoteDelegation create + cast/request with disclosures; attribution to SV; wrong-SV reject | `apps/app/src/test/scala/.../VoteDelegationIntegrationTest.scala` |
 | Manual LocalNet | Full CIP-103 UI path including gateway approval | Root `DEMO_RUNBOOK.md` |
 
-## Tier A (recommended next) — ledger-path Scala IntegrationTest
+## Tier A — ledger-path Scala IntegrationTest
 
 **Goal:** CI-green proof of the delegated ledger path without Selenium,
 LocalNet compose, or a live wallet gateway.
 
-**Proposed class:** `VoteDelegationIntegrationTest` next to existing SV
-integration tests, extending `SvIntegrationTestBase` /
-`EnvironmentDefinition.simpleTopology4Svs` (same harness as
-`SvStateManagementIntegrationTest`).
+**Class:** `VoteDelegationIntegrationTest` extending `SvIntegrationTestBase` /
+`EnvironmentDefinition.simpleTopology4Svs`.
 
-**Minimal scenario:**
+**Scenario covered:**
 
-1. Allocate a voter party on a non-SV participant (e.g. alice/bob validator).
-2. SV creates `VoteDelegation(sv, voterParty)` via ledger submit
-   (`submitJava` / JSON API — same shape as `DEMO_RUNBOOK.md` §0.2).
-3. Seed or create an open `VoteRequest`.
+1. Allocate a voter party on alice validator (non-SV participant).
+2. SV creates `VoteDelegation(sv, voterParty)` via ledger `submitJava`.
+3. Seed an open `VoteRequest` (for cast) via SV admin API.
 4. As the voter (with `DisclosedContracts` for `DsoRules` and the
-   `VoteRequest`), exercise `VoteDelegation_CastVote` and/or
+   `VoteRequest`), exercise `VoteDelegation_CastVote` and
    `VoteDelegation_RequestVote`.
-5. Assert the ballot / request is visible via Scan or SV APIs with
-   `vote.sv` / `requester` = delegating SV.
-
-**Prior art to reuse:**
-
-- Governance lifecycle via SV APIs:
-  `apps/app/src/test/scala/.../SvStateManagementIntegrationTest.scala`
-- Disclosed-contract submission patterns:
-  `WalletSubscriptionsIntegrationTest`, `TokenStandardV2TransferIntegrationTest`,
-  `ExternalPartySetupProposalIntegrationTest`
-- Choice argument shapes: Daml scripts in `TestGovernance.daml`
+5. Assert via SV list APIs that `vote.sv` / `requester` = delegating SV.
+6. Negative: cast with wrong `vote.sv` fails.
 
 **Explicitly out of scope for Tier A:**
 
@@ -68,12 +56,11 @@ integration tests, extending `SvIntegrationTestBase` /
 
 **Acceptance criteria (Tier A):**
 
-- [ ] Green in the normal Splice `IntegrationTest` CI lane (no frontend job)
-- [ ] Voter participant ≠ SV participant
-- [ ] Cast (and optionally request) succeeds only through `VoteDelegation_*`
-- [ ] Assertion on Scan or SV list APIs that the recorded SV is the
-      delegating party
-- [ ] At least one negative case (e.g. wrong voter) fails as expected
+- [x] Green in the normal Splice `IntegrationTest` CI lane (no frontend job)
+- [x] Voter participant ≠ SV participant
+- [x] Cast and request succeed only through `VoteDelegation_*`
+- [x] Assertion on SV list APIs that the recorded SV is the delegating party
+- [x] At least one negative case (wrong SV on cast) fails as expected
 
 ## Tier B (later, optional) — CIP-103 UI e2e
 
@@ -92,8 +79,8 @@ CIP-103 / wallet-gateway Selenium coverage.
   auto-approve / headless mode.
 - Heavier CI (compose + images + Firefox).
 
-**Do not invest in Tier B** until Tier A is landed and review confirms CIP-103
-transport must also be automated.
+**Do not invest in Tier B** until review confirms CIP-103 transport must also
+be automated.
 
 ## Recommendation
 
