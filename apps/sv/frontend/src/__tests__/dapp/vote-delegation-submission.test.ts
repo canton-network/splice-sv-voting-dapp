@@ -139,7 +139,9 @@ describe('submitCastVote', () => {
 
   test('re-resolves a stale id to the current VoteRequest contract', async () => {
     const fakes = buildFakes();
-    fakes.lookupDsoRulesVoteRequest.mockRejectedValue(new Error('404 not found'));
+    fakes.lookupDsoRulesVoteRequest.mockRejectedValue(
+      Object.assign(new Error('VoteRequest contract not found.'), { code: 404 })
+    );
 
     await buildSubmission(fakes).submitCastVote({
       ...castArgs,
@@ -156,12 +158,24 @@ describe('submitCastVote', () => {
 
   test('fails clearly when the vote request cannot be resolved', async () => {
     const fakes = buildFakes();
-    fakes.lookupDsoRulesVoteRequest.mockRejectedValue(new Error('404 not found'));
+    fakes.lookupDsoRulesVoteRequest.mockRejectedValue(
+      Object.assign(new Error('VoteRequest contract not found.'), { code: 404 })
+    );
     fakes.listDsoRulesVoteRequests.mockResolvedValue({ dso_rules_vote_requests: [] });
 
     await expect(buildSubmission(fakes).submitCastVote(castArgs)).rejects.toBeInstanceOf(
       VoteDelegationContextError
     );
+    expect(fakes.prepareExecuteAndWait).not.toHaveBeenCalled();
+  });
+
+  test('surfaces Scan outages from lookup instead of falling through to list', async () => {
+    const fakes = buildFakes();
+    const scanOutage = Object.assign(new Error('Unknown API Status Code!'), { code: 500 });
+    fakes.lookupDsoRulesVoteRequest.mockRejectedValue(scanOutage);
+
+    await expect(buildSubmission(fakes).submitCastVote(castArgs)).rejects.toBe(scanOutage);
+    expect(fakes.listDsoRulesVoteRequests).not.toHaveBeenCalled();
     expect(fakes.prepareExecuteAndWait).not.toHaveBeenCalled();
   });
 
