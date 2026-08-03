@@ -11,8 +11,8 @@ import { DsoRules } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 
 /**
  * dApp-mode DsoInfo, read from Scan /v0/dso. Scan reports the party of the SV
- * sponsoring that Scan instance, so the delegating SV configured in
- * dappMode.svPartyId takes precedence for vote attribution and highlighting.
+ * sponsoring that Scan instance, so the ACS-discovered delegating SV party
+ * takes precedence for vote attribution and highlighting.
  */
 export const useDappDsoInfos = (svPartyIdOverride?: string): UseQueryResult<DsoInfo> => {
   const scanClient = useScanClient();

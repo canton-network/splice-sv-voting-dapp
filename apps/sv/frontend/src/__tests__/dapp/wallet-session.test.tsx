@@ -11,7 +11,13 @@ import {
   useWalletSession,
 } from '../../dapp/WalletSessionContext';
 import { SvConfigProvider } from '../../utils';
-import { disableDappModeConfig, enableDappModeConfig } from './dappConfig';
+import {
+  dappSvPartyId,
+  dappVoteDelegationCid,
+  disableDappModeConfig,
+  enableDappModeConfig,
+  mockVoteDelegationLedgerApi,
+} from './dappConfig';
 
 const mocks = vi.hoisted(() => {
   const client = {
@@ -24,6 +30,7 @@ const mocks = vi.hoisted(() => {
     onAccountsChanged: vi.fn(),
     removeOnAccountsChanged: vi.fn(),
     prepareExecuteAndWait: vi.fn(),
+    ledgerApi: vi.fn(),
   };
   return { client };
 });
@@ -51,6 +58,11 @@ const Probe: React.FC = () => {
     <div>
       <span data-testid="wallet-status">{session.status}</span>
       <span data-testid="wallet-party">{session.voterPartyId ?? ''}</span>
+      <span data-testid="wallet-sv">{session.svPartyId ?? ''}</span>
+      <span data-testid="wallet-delegation">{session.voteDelegationCid ?? ''}</span>
+      <span data-testid="wallet-discovering">
+        {session.isDiscoveringVoteDelegation ? 'yes' : 'no'}
+      </span>
       <span data-testid="wallet-error">{session.errorMessage ?? ''}</span>
       <button onClick={() => void session.connect()}>connect</button>
       <button onClick={() => void session.disconnect()}>disconnect</button>
@@ -76,6 +88,7 @@ describe('WalletSessionProvider', () => {
     mocks.client.disconnect.mockResolvedValue(undefined);
     mocks.client.isConnected.mockResolvedValue({ isConnected: false, isNetworkConnected: false });
     mocks.client.listAccounts.mockResolvedValue([]);
+    mockVoteDelegationLedgerApi(mocks.client);
   });
 
   afterEach(() => {
@@ -101,9 +114,31 @@ describe('WalletSessionProvider', () => {
       testWallet('other::party'),
       testWallet('primary::party', true),
     ]);
+    mockVoteDelegationLedgerApi(mocks.client, { voterPartyId: 'primary::party' });
     renderSession();
     await waitFor(() => expect(screen.getByTestId('wallet-status').textContent).toBe('connected'));
     expect(screen.getByTestId('wallet-party').textContent).toBe('primary::party');
+    await waitFor(() =>
+      expect(screen.getByTestId('wallet-delegation').textContent).toBe(dappVoteDelegationCid)
+    );
+    expect(screen.getByTestId('wallet-sv').textContent).toBe(dappSvPartyId);
+  });
+
+  test('discovery failure surfaces a clear error without dropping the wallet session', async () => {
+    mocks.client.isConnected.mockResolvedValue({ isConnected: true, isNetworkConnected: true });
+    mocks.client.listAccounts.mockResolvedValue([testWallet('primary::party', true)]);
+    mocks.client.ledgerApi.mockImplementation(async (params: { resource: string }) => {
+      if (params.resource === '/v2/state/ledger-end') {
+        return { offset: 1 };
+      }
+      return [];
+    });
+    renderSession();
+    await waitFor(() => expect(screen.getByTestId('wallet-status').textContent).toBe('connected'));
+    await waitFor(() =>
+      expect(screen.getByTestId('wallet-error').textContent).toMatch(/No VoteDelegation/)
+    );
+    expect(screen.getByTestId('wallet-delegation').textContent).toBe('');
   });
 
   test('connect stores the wallet party on success', async () => {
@@ -115,6 +150,7 @@ describe('WalletSessionProvider', () => {
     );
 
     mocks.client.listAccounts.mockResolvedValue([testWallet('voter::party', true)]);
+    mockVoteDelegationLedgerApi(mocks.client, { voterPartyId: 'voter::party' });
     await user.click(screen.getByText('connect'));
 
     await waitFor(() => expect(screen.getByTestId('wallet-status').textContent).toBe('connected'));
@@ -145,6 +181,7 @@ describe('WalletSessionProvider', () => {
     const user = userEvent.setup();
     mocks.client.isConnected.mockResolvedValue({ isConnected: true, isNetworkConnected: true });
     mocks.client.listAccounts.mockResolvedValue([testWallet('voter::party', true)]);
+    mockVoteDelegationLedgerApi(mocks.client, { voterPartyId: 'voter::party' });
     renderSession();
     await waitFor(() => expect(screen.getByTestId('wallet-status').textContent).toBe('connected'));
 
@@ -154,12 +191,14 @@ describe('WalletSessionProvider', () => {
       expect(screen.getByTestId('wallet-status').textContent).toBe('disconnected')
     );
     expect(screen.getByTestId('wallet-party').textContent).toBe('');
+    expect(screen.getByTestId('wallet-delegation').textContent).toBe('');
     expect(mocks.client.disconnect).toHaveBeenCalled();
   });
 
   test('accountsChanged events update the session once connected', async () => {
     mocks.client.isConnected.mockResolvedValue({ isConnected: true, isNetworkConnected: true });
     mocks.client.listAccounts.mockResolvedValue([testWallet('initial::party', true)]);
+    mockVoteDelegationLedgerApi(mocks.client, { voterPartyId: 'initial::party' });
     renderSession();
     await waitFor(() => expect(screen.getByTestId('wallet-status').textContent).toBe('connected'));
     expect(mocks.client.onAccountsChanged).toHaveBeenCalledTimes(1);
@@ -167,6 +206,7 @@ describe('WalletSessionProvider', () => {
       accounts: AccountsChangedEvent
     ) => void;
 
+    mockVoteDelegationLedgerApi(mocks.client, { voterPartyId: 'rotated::party' });
     act(() => listener([testWallet('rotated::party', true)]));
     await waitFor(() =>
       expect(screen.getByTestId('wallet-party').textContent).toBe('rotated::party')
@@ -188,6 +228,7 @@ describe('WalletSessionProvider', () => {
     expect(mocks.client.onAccountsChanged).not.toHaveBeenCalled();
 
     mocks.client.listAccounts.mockResolvedValue([testWallet('voter::party', true)]);
+    mockVoteDelegationLedgerApi(mocks.client, { voterPartyId: 'voter::party' });
     await user.click(screen.getByText('connect'));
 
     await waitFor(() => expect(screen.getByTestId('wallet-status').textContent).toBe('connected'));

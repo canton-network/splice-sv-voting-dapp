@@ -28,7 +28,5 @@ window.splice_config = {
     enabled: "${SPLICE_APP_UI_DAPP_MODE_ENABLED}",
     scanUrl: "${SPLICE_APP_UI_DAPP_MODE_SCAN_URL}",
     cip103RpcUrl: "${SPLICE_APP_UI_DAPP_MODE_CIP103_RPC_URL}",
-    svPartyId: "${SPLICE_APP_UI_DAPP_MODE_SV_PARTY_ID}",
-    voteDelegationCid: "${SPLICE_APP_UI_DAPP_MODE_VOTE_DELEGATION_CID}",
   },
 };

@@ -21,10 +21,10 @@ const SV_PARTY = 'Delegating-SV::1220aa';
 const dappMode: DappModeConfig = {
   scanUrl: 'http://scan.localhost:4000/api/scan',
   cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
-  svPartyId: SV_PARTY,
-  voteDelegationCid: '00votedelegation',
   dsoGovernancePackageName: 'splice-dso-governance',
 };
+
+const DELEGATION_CID = '00votedelegation';
 
 const dsoInfoResponse = {
   sv_party_id: 'Scan-Sponsor-SV::1220cc',
@@ -78,12 +78,22 @@ const buildFakes = (): FakeClients => {
   };
 };
 
-const buildSubmission = (fakes: FakeClients, voterPartyId: string | undefined = VOTER_PARTY) =>
+const buildSubmission = (
+  fakes: FakeClients,
+  args: {
+    voterPartyId?: string | undefined;
+    svPartyId?: string | undefined;
+    voteDelegationCid?: string | undefined;
+  } = {}
+) =>
   createVoteDelegationSubmission({
     scanClient: fakes.scanClient,
     sdkClient: fakes.sdkClient,
     dappMode,
-    getVoterPartyId: () => voterPartyId,
+    getVoterPartyId: () => ('voterPartyId' in args ? args.voterPartyId : VOTER_PARTY),
+    getSvPartyId: () => ('svPartyId' in args ? args.svPartyId : SV_PARTY),
+    getVoteDelegationCid: () =>
+      'voteDelegationCid' in args ? args.voteDelegationCid : DELEGATION_CID,
   });
 
 const castArgs = {
@@ -168,26 +178,16 @@ describe('submitCastVote', () => {
 
   test('requires a connected wallet', async () => {
     const fakes = buildFakes();
-    const submission = createVoteDelegationSubmission({
-      scanClient: fakes.scanClient,
-      sdkClient: fakes.sdkClient,
-      dappMode,
-      getVoterPartyId: () => undefined,
-    });
-    await expect(submission.submitCastVote(castArgs)).rejects.toBeInstanceOf(
-      VoteDelegationContextError
-    );
+    await expect(
+      buildSubmission(fakes, { voterPartyId: undefined }).submitCastVote(castArgs)
+    ).rejects.toBeInstanceOf(VoteDelegationContextError);
   });
 
-  test('requires a configured VoteDelegation contract id', async () => {
+  test('requires a discovered VoteDelegation contract id', async () => {
     const fakes = buildFakes();
-    const submission = createVoteDelegationSubmission({
-      scanClient: fakes.scanClient,
-      sdkClient: fakes.sdkClient,
-      dappMode: { ...dappMode, voteDelegationCid: undefined },
-      getVoterPartyId: () => VOTER_PARTY,
-    });
-    await expect(submission.submitCastVote(castArgs)).rejects.toThrow(/voteDelegationCid/);
+    await expect(
+      buildSubmission(fakes, { voteDelegationCid: undefined }).submitCastVote(castArgs)
+    ).rejects.toThrow(/No VoteDelegation discovered/);
   });
 });
 
@@ -258,19 +258,10 @@ describe('submitCreateVoteRequest', () => {
     ).rejects.toBeInstanceOf(SignatureRejectedError);
   });
 
-  test('falls back to the Scan SV party when none is configured', async () => {
+  test('requires a discovered delegating SV party', async () => {
     const fakes = buildFakes();
-    const submission = createVoteDelegationSubmission({
-      scanClient: fakes.scanClient,
-      sdkClient: fakes.sdkClient,
-      dappMode: { ...dappMode, svPartyId: undefined },
-      getVoterPartyId: () => VOTER_PARTY,
-    });
-    await submission.submitCreateVoteRequest(requestArgs);
-
-    const params = fakes.prepareExecuteAndWait.mock.calls[0][0];
-    expect(params.commands[0].ExerciseCommand.choiceArgument.requestVote.requester).toBe(
-      'Scan-Sponsor-SV::1220cc'
-    );
+    await expect(
+      buildSubmission(fakes, { svPartyId: undefined }).submitCreateVoteRequest(requestArgs)
+    ).rejects.toThrow(/delegating SV party/);
   });
 });

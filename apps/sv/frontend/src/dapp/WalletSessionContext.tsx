@@ -5,6 +5,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 
 import { useDappModeConfig } from '../utils';
 import { getDappSdkClient } from './dappSdkClient';
+import { discoverVoteDelegation } from './discoverVoteDelegation';
 
 export type WalletConnectionStatus =
   | 'initializing'
@@ -16,6 +17,12 @@ export interface WalletSession {
   status: WalletConnectionStatus;
   /** Party id of the connected wallet account — the VoteDelegation voterParty. */
   voterPartyId?: string;
+  /** Delegating SV party discovered from the VoteDelegation ACS. */
+  svPartyId?: string;
+  /** VoteDelegation contract id discovered from the ACS. */
+  voteDelegationCid?: string;
+  /** True while an ACS discovery query is in flight after connect. */
+  isDiscoveringVoteDelegation: boolean;
   errorMessage?: string;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
@@ -32,8 +39,9 @@ const WalletSessionContext = React.createContext<WalletSession | undefined>(unde
 
 /**
  * dApp-mode wallet session: initializes the CIP-103 SDK against the configured
- * RPC endpoint, restores a persisted session on mount, and tracks the
- * connected voter party. Mounted only when dApp mode is enabled.
+ * RPC endpoint, restores a persisted session on mount, tracks the connected
+ * voter party, and discovers the VoteDelegation (sv + cid) via ACS.
+ * Mounted only when dApp mode is enabled.
  */
 export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const dappMode = useDappModeConfig();
@@ -41,23 +49,76 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
     throw new Error('WalletSessionProvider requires dappMode to be enabled in the app config');
   }
   const cip103RpcUrl = dappMode.cip103RpcUrl;
+  const packageName = dappMode.dsoGovernancePackageName;
   const client = useMemo(() => getDappSdkClient(cip103RpcUrl), [cip103RpcUrl]);
 
   const [status, setStatus] = useState<WalletConnectionStatus>('initializing');
   const [voterPartyId, setVoterPartyId] = useState<string | undefined>(undefined);
+  const [svPartyId, setSvPartyId] = useState<string | undefined>(undefined);
+  const [voteDelegationCid, setVoteDelegationCid] = useState<string | undefined>(undefined);
+  const [isDiscoveringVoteDelegation, setIsDiscoveringVoteDelegation] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
 
-  const applyAccounts = useCallback((accounts: readonly Wallet[]) => {
-    const primary = selectPrimaryWallet(accounts);
-    if (primary) {
-      setVoterPartyId(primary.partyId);
-      setStatus('connected');
-    } else {
-      setVoterPartyId(undefined);
-      setStatus('disconnected');
-    }
-    setErrorMessage(undefined);
+  const discoveryGenerationRef = useRef(0);
+
+  const clearDiscovery = useCallback((): void => {
+    discoveryGenerationRef.current += 1;
+    setSvPartyId(undefined);
+    setVoteDelegationCid(undefined);
+    setIsDiscoveringVoteDelegation(false);
   }, []);
+
+  const runDiscovery = useCallback(
+    async (partyId: string): Promise<void> => {
+      const generation = ++discoveryGenerationRef.current;
+      setIsDiscoveringVoteDelegation(true);
+      setSvPartyId(undefined);
+      setVoteDelegationCid(undefined);
+      try {
+        const discovered = await discoverVoteDelegation({
+          sdkClient: client,
+          voterPartyId: partyId,
+          packageName,
+        });
+        if (generation !== discoveryGenerationRef.current) {
+          return;
+        }
+        setSvPartyId(discovered.svPartyId);
+        setVoteDelegationCid(discovered.voteDelegationCid);
+        setErrorMessage(undefined);
+      } catch (error) {
+        if (generation !== discoveryGenerationRef.current) {
+          return;
+        }
+        setSvPartyId(undefined);
+        setVoteDelegationCid(undefined);
+        setErrorMessage(formatWalletError(error));
+      } finally {
+        if (generation === discoveryGenerationRef.current) {
+          setIsDiscoveringVoteDelegation(false);
+        }
+      }
+    },
+    [client, packageName]
+  );
+
+  const applyAccounts = useCallback(
+    (accounts: readonly Wallet[]) => {
+      const primary = selectPrimaryWallet(accounts);
+      if (primary) {
+        setVoterPartyId(primary.partyId);
+        setStatus('connected');
+        setErrorMessage(undefined);
+        void runDiscovery(primary.partyId);
+      } else {
+        setVoterPartyId(undefined);
+        setStatus('disconnected');
+        clearDiscovery();
+        setErrorMessage(undefined);
+      }
+    },
+    [runDiscovery, clearDiscovery]
+  );
 
   // The SDK only accepts event subscriptions while a session is connected
   // (requireClient throws "Not connected" otherwise), so the accounts listener
@@ -120,13 +181,15 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
     void bootstrap();
     return () => {
       cancelled = true;
+      clearDiscovery();
       unsubscribe();
     };
-  }, [client, applyAccounts, ensureSubscribed, unsubscribe]);
+  }, [client, applyAccounts, ensureSubscribed, unsubscribe, clearDiscovery]);
 
   const connect = useCallback(async (): Promise<void> => {
     setStatus('initializing');
     setErrorMessage(undefined);
+    clearDiscovery();
     try {
       const result = await client.connect();
       if (!result.isConnected) {
@@ -142,7 +205,7 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
       setStatus('wallet_connection_failed');
       setErrorMessage(formatWalletError(error));
     }
-  }, [client, applyAccounts, ensureSubscribed]);
+  }, [client, applyAccounts, ensureSubscribed, clearDiscovery]);
 
   const disconnect = useCallback(async (): Promise<void> => {
     try {
@@ -154,13 +217,32 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
     }
     unsubscribe();
     setVoterPartyId(undefined);
+    clearDiscovery();
     setStatus('disconnected');
     setErrorMessage(undefined);
-  }, [client, unsubscribe]);
+  }, [client, unsubscribe, clearDiscovery]);
 
   const session = useMemo<WalletSession>(
-    () => ({ status, voterPartyId, errorMessage, connect, disconnect }),
-    [status, voterPartyId, errorMessage, connect, disconnect]
+    () => ({
+      status,
+      voterPartyId,
+      svPartyId,
+      voteDelegationCid,
+      isDiscoveringVoteDelegation,
+      errorMessage,
+      connect,
+      disconnect,
+    }),
+    [
+      status,
+      voterPartyId,
+      svPartyId,
+      voteDelegationCid,
+      isDiscoveringVoteDelegation,
+      errorMessage,
+      connect,
+      disconnect,
+    ]
   );
 
   return <WalletSessionContext.Provider value={session}>{children}</WalletSessionContext.Provider>;

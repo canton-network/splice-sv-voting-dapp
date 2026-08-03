@@ -15,6 +15,7 @@ import {
   dappSvPartyId,
   disableDappModeConfig,
   enableDappModeConfig,
+  mockVoteDelegationLedgerApi,
 } from './dappConfig';
 import { DappWrapper } from './helpers';
 
@@ -40,6 +41,7 @@ const mocks = vi.hoisted(() => {
     onAccountsChanged: vi.fn(async () => undefined),
     removeOnAccountsChanged: vi.fn(async () => undefined),
     prepareExecuteAndWait: vi.fn(),
+    ledgerApi: vi.fn(),
   };
   return { client };
 });
@@ -66,6 +68,7 @@ describe('dApp mode reads from Scan', () => {
   beforeEach(() => {
     enableDappModeConfig();
     server.use(...buildScanMock(dappScanUrl), ...svBackendRejections);
+    mockVoteDelegationLedgerApi(mocks.client);
   });
 
   afterEach(() => {
@@ -102,7 +105,7 @@ describe('dApp mode reads from Scan', () => {
     });
   });
 
-  test('useDsoInfos reports the configured delegating SV party', async () => {
+  test('useDsoInfos reports the ACS-discovered delegating SV party', async () => {
     const Probe: React.FC = () => {
       const dsoInfos: UseQueryResult<DsoInfo> = useDsoInfos();
       return <span data-testid="sv-party">{dsoInfos.data?.svPartyId ?? 'pending'}</span>;
@@ -114,16 +117,15 @@ describe('dApp mode reads from Scan', () => {
       </DappWrapper>
     );
 
-    // The dApp-mode config pins the delegating SV party (matching the scan
-    // fixture in this test setup).
     await waitFor(() => {
       expect(screen.getByTestId('sv-party').textContent).toBe(dappSvPartyId);
     });
   });
 
-  test('useDsoInfos overrides the Scan sv_party_id with the configured party', async () => {
-    disableDappModeConfig();
-    enableDappModeConfig({ svPartyId: 'Delegating-SV::1220ffeeddccbbaa' });
+  test('useDsoInfos overrides the Scan sv_party_id with the discovered party', async () => {
+    mockVoteDelegationLedgerApi(mocks.client, {
+      svPartyId: 'Delegating-SV::1220ffeeddccbbaa',
+    });
 
     const Probe: React.FC = () => {
       const dsoInfos: UseQueryResult<DsoInfo> = useDsoInfos();

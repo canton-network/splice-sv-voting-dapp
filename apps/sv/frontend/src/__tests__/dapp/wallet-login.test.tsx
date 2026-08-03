@@ -8,7 +8,12 @@ import App from '../../App';
 import { SvConfigProvider } from '../../utils';
 import { buildScanMock } from '../mocks/handlers/scan-api';
 import { server } from '../setup/setup';
-import { dappScanUrl, disableDappModeConfig, enableDappModeConfig } from './dappConfig';
+import {
+  dappScanUrl,
+  disableDappModeConfig,
+  enableDappModeConfig,
+  mockVoteDelegationLedgerApi,
+} from './dappConfig';
 
 const mocks = vi.hoisted(() => {
   const wallet = {
@@ -31,6 +36,7 @@ const mocks = vi.hoisted(() => {
     onAccountsChanged: vi.fn(),
     removeOnAccountsChanged: vi.fn(),
     prepareExecuteAndWait: vi.fn(),
+    ledgerApi: vi.fn(),
   };
   return { client, wallet };
 });
@@ -57,6 +63,7 @@ describe('dApp mode login', () => {
     mocks.client.disconnect.mockResolvedValue(undefined);
     mocks.client.isConnected.mockResolvedValue({ isConnected: false, isNetworkConnected: false });
     mocks.client.listAccounts.mockResolvedValue([]);
+    mockVoteDelegationLedgerApi(mocks.client);
   });
 
   afterEach(() => {

@@ -52,6 +52,12 @@ archiving the `VoteDelegation` contract.
    browser.
 4. A Scan URL reachable from the voter's browser.
 
+After wallet connect, the UI discovers the `VoteDelegation` (and thus the
+delegating SV party and contract id) via an ACS query through the CIP-103
+`ledgerApi`. Exactly one matching contract is required for the connected
+wallet party; zero or multiple matches surface a clear error. Those values
+are **not** configured statically.
+
 ## Configuration
 
 dApp mode is configured on the SV web UI only; no SV app backend changes are
@@ -76,11 +82,6 @@ window.splice_config = {
     scanUrl: 'http://scan.localhost:4000/api/scan',
     // CIP-103 dApp RPC URL (reference wallet gateway or any CIP-103 endpoint).
     cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
-    // The delegating SV party (Vote.sv / requester). Falls back to the
-    // sv_party_id reported by Scan /v0/dso when unset.
-    svPartyId: '<sv party id>',
-    // Contract id of the VoteDelegation authorizing the wallet party.
-    voteDelegationCid: '<VoteDelegation contract id>',
     // Optional override of the Daml package name used in template ids.
     // dsoGovernancePackageName: 'splice-dso-governance',
   },
@@ -96,8 +97,6 @@ unaffected):
 | `SPLICE_APP_UI_DAPP_MODE_ENABLED` | Set to `true` to enable dApp mode |
 | `SPLICE_APP_UI_DAPP_MODE_SCAN_URL` | Scan API base URL |
 | `SPLICE_APP_UI_DAPP_MODE_CIP103_RPC_URL` | CIP-103 dApp RPC URL |
-| `SPLICE_APP_UI_DAPP_MODE_SV_PARTY_ID` | Delegating SV party (optional; falls back to Scan) |
-| `SPLICE_APP_UI_DAPP_MODE_VOTE_DELEGATION_CID` | `VoteDelegation` contract id |
 
 ## Wallets
 
@@ -125,7 +124,8 @@ mediator debug status, and desired-amulet-price updates.
 
 - `src/utils/config.tsx` — `dappMode` schema and `useDappModeConfig`
 - `src/dapp/dappSdkClient.ts` — CIP-103 SDK facade (single mockable seam)
-- `src/dapp/WalletSessionContext.tsx` — wallet session provider
+- `src/dapp/discoverVoteDelegation.ts` — ACS discovery of VoteDelegation
+- `src/dapp/WalletSessionContext.tsx` — wallet session + VoteDelegation discovery
 - `src/dapp/WalletAuthCheck.tsx` — connect-wallet login gate
 - `src/dapp/DappSvAdminClientProvider.tsx` — provides `SvAdminClient` in dApp mode
 - `src/dapp/dappSvAdminClient.ts` — Scan-backed reads

@@ -33,10 +33,6 @@ export const dappModeSchema = z
     scanUrl: z.string().optional(),
     // CIP-103 dApp RPC URL (wallet gateway or partner wallet), e.g. http://localhost:3030/api/v0/dapp
     cip103RpcUrl: z.string().optional(),
-    // The delegating SV party. Falls back to Scan /v0/dso sv_party_id when unset.
-    svPartyId: z.string().optional(),
-    // Contract id of the VoteDelegation authorizing the wallet party to vote.
-    voteDelegationCid: z.string().optional(),
     // Override for the dso-governance Daml package name in template ids.
     dsoGovernancePackageName: z.string().optional(),
   })
@@ -108,8 +104,6 @@ const DEFAULT_DSO_GOVERNANCE_PACKAGE_NAME = 'splice-dso-governance';
 export interface DappModeConfig {
   scanUrl: string;
   cip103RpcUrl: string;
-  svPartyId?: string;
-  voteDelegationCid?: string;
   dsoGovernancePackageName: string;
 }
 
@@ -123,8 +117,6 @@ export const getDappModeConfig = (config: SvConfig): DappModeConfig | undefined 
   return {
     scanUrl,
     cip103RpcUrl,
-    svPartyId: dappMode.svPartyId?.trim() || undefined,
-    voteDelegationCid: dappMode.voteDelegationCid?.trim() || undefined,
     dsoGovernancePackageName:
       dappMode.dsoGovernancePackageName?.trim() || DEFAULT_DSO_GOVERNANCE_PACKAGE_NAME,
   };

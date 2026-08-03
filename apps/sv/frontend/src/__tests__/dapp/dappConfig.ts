@@ -1,6 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import { vi } from 'vitest';
+
 import { config as baseConfig } from '../setup/config';
 
 export const dappScanUrl = 'http://scan.localhost:4000/api/scan';
@@ -15,8 +17,6 @@ export const dappModeBlock = {
   enabled: true,
   scanUrl: dappScanUrl,
   cip103RpcUrl: dappCip103RpcUrl,
-  svPartyId: dappSvPartyId,
-  voteDelegationCid: dappVoteDelegationCid,
 };
 
 /** window.splice_config shape for dApp-mode tests: base test config + enabled dappMode block. */
@@ -37,4 +37,44 @@ export function enableDappModeConfig(overrides: Partial<typeof dappModeBlock> = 
 
 export function disableDappModeConfig(): void {
   delete (window.splice_config as unknown as { dappMode?: unknown }).dappMode;
+}
+
+/** Mock CIP-103 ledgerApi responses for a successful VoteDelegation ACS discovery. */
+export function mockVoteDelegationLedgerApi(
+  client: { ledgerApi: ReturnType<typeof vi.fn> },
+  args: {
+    voterPartyId?: string;
+    svPartyId?: string;
+    voteDelegationCid?: string;
+  } = {}
+): void {
+  const voterPartyId = args.voterPartyId ?? dappVoterPartyId;
+  const svPartyId = args.svPartyId ?? dappSvPartyId;
+  const voteDelegationCid = args.voteDelegationCid ?? dappVoteDelegationCid;
+
+  client.ledgerApi.mockImplementation(async (params: { resource: string }) => {
+    if (params.resource === '/v2/state/ledger-end') {
+      return { offset: 42 };
+    }
+    if (params.resource === '/v2/state/active-contracts') {
+      return [
+        {
+          contractEntry: {
+            JsActiveContract: {
+              createdEvent: {
+                contractId: voteDelegationCid,
+                templateId: '#splice-dso-governance:Splice.DsoRules.VoteDelegation:VoteDelegation',
+                createArgument: {
+                  dso: 'DSO::1220',
+                  sv: svPartyId,
+                  voterParty: voterPartyId,
+                },
+              },
+            },
+          },
+        },
+      ];
+    }
+    throw new Error(`unexpected ledgerApi resource: ${params.resource}`);
+  });
 }

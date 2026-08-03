@@ -19,6 +19,7 @@ import {
   dappVoterPartyId,
   disableDappModeConfig,
   enableDappModeConfig,
+  mockVoteDelegationLedgerApi,
 } from './dappConfig';
 import { DappWrapper } from './helpers';
 
@@ -44,6 +45,7 @@ const mocks = vi.hoisted(() => {
     onAccountsChanged: vi.fn(async () => undefined),
     removeOnAccountsChanged: vi.fn(async () => undefined),
     prepareExecuteAndWait: vi.fn(async () => ({ tx: { payload: { updateId: 'update-1' } } })),
+    ledgerApi: vi.fn(),
   };
   return { client };
 });
@@ -71,6 +73,7 @@ describe('dApp mode vote casting', () => {
   beforeEach(() => {
     enableDappModeConfig();
     server.use(...buildScanMock(dappScanUrl));
+    mockVoteDelegationLedgerApi(mocks.client);
   });
 
   afterEach(() => {

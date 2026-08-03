@@ -29,8 +29,6 @@ describe('dappMode config schema', () => {
       enabled: '',
       scanUrl: '',
       cip103RpcUrl: '',
-      svPartyId: '',
-      voteDelegationCid: '',
     });
     expect(getDappModeConfig(parsed)).toBeUndefined();
   });
@@ -47,15 +45,11 @@ describe('dappMode config schema', () => {
       enabled: true,
       scanUrl: 'http://scan.localhost:4000/api/scan',
       cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
-      svPartyId: 'DSO-SV-1::1220deadbeef',
-      voteDelegationCid: '00delegation',
     });
     const dappMode = getDappModeConfig(parsed);
     expect(dappMode).toBeDefined();
     expect(dappMode?.scanUrl).toBe('http://scan.localhost:4000/api/scan');
     expect(dappMode?.cip103RpcUrl).toBe('http://localhost:3030/api/v0/dapp');
-    expect(dappMode?.svPartyId).toBe('DSO-SV-1::1220deadbeef');
-    expect(dappMode?.voteDelegationCid).toBe('00delegation');
     expect(dappMode?.dsoGovernancePackageName).toBe('splice-dso-governance');
   });
 
@@ -68,8 +62,6 @@ describe('dappMode config schema', () => {
     });
     const dappMode = getDappModeConfig(parsed);
     expect(dappMode).toBeDefined();
-    expect(dappMode?.svPartyId).toBeUndefined();
-    expect(dappMode?.voteDelegationCid).toBeUndefined();
     expect(dappMode?.dsoGovernancePackageName).toBe('splice-dso-governance-dev');
   });
 

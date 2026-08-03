@@ -97,6 +97,10 @@ export interface VoteDelegationSubmissionDeps {
   sdkClient: DappSdkClient;
   dappMode: DappModeConfig;
   getVoterPartyId: () => string | undefined;
+  /** Delegating SV party from ACS-discovered VoteDelegation. */
+  getSvPartyId: () => string | undefined;
+  /** VoteDelegation contract id from ACS discovery. */
+  getVoteDelegationCid: () => string | undefined;
 }
 
 export interface VoteDelegationSubmission {
@@ -123,7 +127,8 @@ export interface VoteDelegationSubmission {
 export function createVoteDelegationSubmission(
   deps: VoteDelegationSubmissionDeps
 ): VoteDelegationSubmission {
-  const { scanClient, sdkClient, dappMode, getVoterPartyId } = deps;
+  const { scanClient, sdkClient, dappMode, getVoterPartyId, getSvPartyId, getVoteDelegationCid } =
+    deps;
 
   const resolveContext = async (operation: string): Promise<VoteDelegationContext> => {
     const voterPartyId = getVoterPartyId();
@@ -132,15 +137,20 @@ export function createVoteDelegationSubmission(
         `Connect a wallet so the VoteDelegation voter party can sign the ${operation}.`
       );
     }
-    const voteDelegationCid = dappMode.voteDelegationCid;
+    const voteDelegationCid = getVoteDelegationCid();
     if (!voteDelegationCid) {
       throw new VoteDelegationContextError(
-        'dappMode.voteDelegationCid is not configured — set the VoteDelegation contract id.'
+        'No VoteDelegation discovered for the connected wallet party — reconnect or ask the SV to create one.'
+      );
+    }
+    const svPartyId = getSvPartyId();
+    if (!svPartyId) {
+      throw new VoteDelegationContextError(
+        'VoteDelegation discovery did not yield a delegating SV party — reconnect and retry.'
       );
     }
 
     const dsoInfo = await scanClient.getDsoInfo();
-    const svPartyId = dappMode.svPartyId ?? dsoInfo.sv_party_id;
     const dsoRulesContract = dsoInfo.dso_rules.contract as ScanContract;
     const dsoRulesCid = dsoRulesContract.contract_id;
     if (!dsoRulesCid) {
