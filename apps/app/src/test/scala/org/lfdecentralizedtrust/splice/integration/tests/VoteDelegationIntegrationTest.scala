@@ -167,6 +167,8 @@ class VoteDelegationIntegrationTest extends SvIntegrationTestBase with WalletTes
   "delegated voter can request a vote attributed to the SV" in { implicit env =>
     val (sv1Party, _, voterParty, delegationCid) = setupDelegatedVoter()
     val dsoRules = sv1Backend.getDsoInfo().dsoRules
+    // VoteRequest.requester is the SV name (Text), not the party id.
+    val sv1Name = Option(dsoRules.payload.svs.get(sv1Party.toProtoPrimitive)).value.name
 
     val requestVote = new DsoRules_RequestVote(
       sv1Party.toProtoPrimitive,
@@ -199,8 +201,11 @@ class VoteDelegationIntegrationTest extends SvIntegrationTestBase with WalletTes
           .listVoteRequests()
           .find(_.payload.reason.body == "delegated request")
           .value
-        created.payload.requester shouldBe sv1Party.toProtoPrimitive
-        created.payload.requester should not be voterParty.toProtoPrimitive
+        created.payload.requester shouldBe sv1Name
+        created.payload.votes.asScala.keySet should contain(sv1Name)
+        created.payload.votes.asScala.values.map(_.sv) should contain(sv1Party.toProtoPrimitive)
+        created.payload.votes.asScala.values
+          .map(_.sv) should not contain voterParty.toProtoPrimitive
       },
     )
   }
@@ -221,6 +226,8 @@ class VoteDelegationIntegrationTest extends SvIntegrationTestBase with WalletTes
       )
       sv1Backend.listVoteRequests().loneElement
     }
+    // Opening the request already records sv2's requester vote; the rejected cast must not change that map.
+    val votesBefore = voteRequest.payload.votes
 
     val castVoteWrongSv = new DsoRules_CastVote(
       voteRequest.contractId,
@@ -252,13 +259,13 @@ class VoteDelegationIntegrationTest extends SvIntegrationTestBase with WalletTes
       _ => succeed,
     )
 
-    // Failed cast must not attribute a ballot to sv2 through this delegation (sv1's).
-    clue("vote request still has no ballot for sv2 from the rejected delegated cast") {
+    clue("rejected cast leaves the vote map unchanged") {
       val unchanged =
         sv1Backend.listVoteRequests().find(_.contractId == voteRequest.contractId).value
+      unchanged.payload.votes shouldBe votesBefore
+      unchanged.payload.votes.asScala.values.map(_.reason.body) should not contain "wrong sv"
       unchanged.payload.votes.asScala.values
-        .map(_.sv) should not contain sv2Party.toProtoPrimitive
-      sv1Party should not be sv2Party
+        .map(_.sv) should not contain sv1Party.toProtoPrimitive
     }
   }
 }
