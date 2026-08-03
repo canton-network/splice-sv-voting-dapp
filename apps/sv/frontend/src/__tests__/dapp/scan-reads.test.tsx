@@ -48,21 +48,11 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('../../dapp/dappSdkClient', () => ({
   getDappSdkClient: () => mocks.client,
-  resetDappSdkClientForTests: () => undefined,
 }));
 
 // Any request to the SV backend fails loudly: in dApp mode every read must be
 // served by Scan.
-const svBackendRejections = [
-  http.get(`${svUrl}/v0/dso`, () => new HttpResponse(null, { status: 500 })),
-  http.get(`${svUrl}/v0/admin/sv/voterequests`, () => new HttpResponse(null, { status: 500 })),
-  http.post(`${svUrl}/v0/admin/sv/voteresults`, () => new HttpResponse(null, { status: 500 })),
-  http.post(
-    `${svUrl}/v0/admin/sv/voteresults/count`,
-    () => new HttpResponse(null, { status: 500 })
-  ),
-  http.post(`${svUrl}/v0/admin/sv/voterequest`, () => new HttpResponse(null, { status: 500 })),
-];
+const svBackendRejections = [http.all(`${svUrl}/*`, () => new HttpResponse(null, { status: 500 }))];
 
 describe('dApp mode reads from Scan', () => {
   beforeEach(() => {

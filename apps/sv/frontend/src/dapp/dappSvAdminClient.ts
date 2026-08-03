@@ -1,10 +1,12 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as scanOpenapi from '@canton-network/scan-openapi';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 import * as svOpenapi from '@canton-network/sv-openapi';
 import BigNumber from 'bignumber.js';
 
 import { RelTime } from '@daml.js/daml-stdlib-DA-Time-Types-1.0.0/lib/DA/Time/Types/module';
+import { DsoRules } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
 
 import { SvAdminClient } from '../contexts/SvAdminServiceContext';
@@ -53,10 +55,8 @@ export function createDappSvAdminClient(deps: DappSvAdminClientDeps): SvAdminCli
 
   const getActiveSynchronizerId = async (): Promise<string> => {
     const dsoInfo = await scanClient.getDsoInfo();
-    const payload = dsoInfo.dso_rules.contract.payload as {
-      config?: { decentralizedSynchronizer?: { activeSynchronizerId?: string } };
-    };
-    const synchronizerId = payload.config?.decentralizedSynchronizer?.activeSynchronizerId;
+    const dsoRules = Contract.decodeOpenAPI(dsoInfo.dso_rules.contract, DsoRules);
+    const synchronizerId = dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId;
     if (!synchronizerId) {
       throw new Error('DsoRules config does not expose an active synchronizer id');
     }

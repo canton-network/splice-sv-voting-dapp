@@ -108,8 +108,3 @@ export function getDappSdkClient(cip103RpcUrl: string): DappSdkClient {
   }
   return singleton;
 }
-
-/** Test-only reset of the module-level singleton. */
-export function resetDappSdkClientForTests(): void {
-  singleton = undefined;
-}

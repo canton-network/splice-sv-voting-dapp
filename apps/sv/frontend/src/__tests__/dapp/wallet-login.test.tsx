@@ -43,7 +43,6 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('../../dapp/dappSdkClient', () => ({
   getDappSdkClient: () => mocks.client,
-  resetDappSdkClientForTests: () => undefined,
 }));
 
 const AppWithConfig = () => (

@@ -52,7 +52,6 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('../../dapp/dappSdkClient', () => ({
   getDappSdkClient: () => mocks.client,
-  resetDappSdkClientForTests: () => undefined,
 }));
 
 const voteRequestContractId = voteRequests.dso_rules_vote_requests[0]

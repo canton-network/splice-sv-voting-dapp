@@ -23,6 +23,11 @@ The UI holds no keys, mnemonics, or long-lived tokens: every submission is
 approved in the wallet, and the connected wallet account's party is used as
 the delegation's voter party.
 
+dApp mode removes the SV **app backend** from the voter's path (no `/api/sv`
+reads or submissions). The SV **participant** remains an informee and confirmer
+of delegated `VoteDelegation_*` exercises — that is required by the on-ledger
+authorization model, not an accidental dependency on the SV HTTP API.
+
 ## On-ledger foundation
 
 dApp mode builds on the `VoteDelegation` template

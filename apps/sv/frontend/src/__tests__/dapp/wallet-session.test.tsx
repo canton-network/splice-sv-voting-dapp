@@ -37,7 +37,6 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('../../dapp/dappSdkClient', () => ({
   getDappSdkClient: () => mocks.client,
-  resetDappSdkClientForTests: () => undefined,
 }));
 
 const testWallet = (partyId: string, primary = false): Wallet =>
