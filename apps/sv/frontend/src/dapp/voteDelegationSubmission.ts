@@ -31,28 +31,28 @@ export class SignatureRejectedError extends Error {
   }
 }
 
-async function isUserCancelled(error: unknown): Promise<boolean> {
+// ErrorCode.UserCancelled from @canton-network/dapp-sdk — compare by value so
+// this module never statically imports the SDK (Lit warning in standard mode).
+const DAPP_SDK_USER_CANCELLED = 1;
+
+function isUserCancelled(error: unknown): boolean {
   if (error instanceof SignatureRejectedError) {
     return true;
   }
   if (typeof error === 'object' && error !== null && 'code' in error) {
     const code = (error as { code: unknown }).code;
-    // Dynamic import keeps the SDK out of the standard-mode bundle; by the
-    // time a wallet error surfaces the module is already loaded and cached.
-    const { ErrorCode } = await import('@canton-network/dapp-sdk');
-    if (code === ErrorCode.UserCancelled || code === 'signature_rejected') {
-      return true;
-    }
-  }
-  if (error instanceof Error) {
-    const lower = error.message.toLowerCase();
-    return lower.includes('cancelled') || lower.includes('canceled') || lower.includes('rejected');
+    // Structured CIP-103 / wallet signals only. Do not substring-match message
+    // text: ledger failures often contain "rejected" and must surface as
+    // themselves, not as a wallet cancellation.
+    return (
+      code === DAPP_SDK_USER_CANCELLED || code === 'UserCancelled' || code === 'signature_rejected'
+    );
   }
   return false;
 }
 
-const mapWalletError = async (error: unknown): Promise<Error> => {
-  if (await isUserCancelled(error)) {
+const mapWalletError = (error: unknown): Error => {
+  if (isUserCancelled(error)) {
     return new SignatureRejectedError(
       error instanceof Error ? error.message : 'Signature rejected or cancelled in the wallet'
     );
@@ -239,7 +239,7 @@ export function createVoteDelegationSubmission(
       try {
         await sdkClient.prepareExecuteAndWait(params);
       } catch (error) {
-        throw await mapWalletError(error);
+        throw mapWalletError(error);
       }
     },
 
@@ -274,7 +274,7 @@ export function createVoteDelegationSubmission(
       try {
         await sdkClient.prepareExecuteAndWait(params);
       } catch (error) {
-        throw await mapWalletError(error);
+        throw mapWalletError(error);
       }
     },
   };

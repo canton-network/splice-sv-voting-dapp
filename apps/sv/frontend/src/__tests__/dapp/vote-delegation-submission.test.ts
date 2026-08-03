@@ -249,13 +249,25 @@ describe('submitCreateVoteRequest', () => {
     );
   });
 
-  test('maps wallet rejection to SignatureRejectedError', async () => {
+  test('maps structured signature_rejected code to SignatureRejectedError', async () => {
     const fakes = buildFakes();
-    fakes.prepareExecuteAndWait.mockRejectedValue(new Error('signature rejected by user'));
+    fakes.prepareExecuteAndWait.mockRejectedValue(
+      Object.assign(new Error('signature rejected by user'), { code: 'signature_rejected' })
+    );
 
     await expect(
       buildSubmission(fakes).submitCreateVoteRequest(requestArgs)
     ).rejects.toBeInstanceOf(SignatureRejectedError);
+  });
+
+  test('does not map on-ledger rejection messages to SignatureRejectedError', async () => {
+    const fakes = buildFakes();
+    const ledgerError = new Error('the transaction was rejected by the mediator');
+    fakes.prepareExecuteAndWait.mockRejectedValue(ledgerError);
+
+    await expect(buildSubmission(fakes).submitCreateVoteRequest(requestArgs)).rejects.toBe(
+      ledgerError
+    );
   });
 
   test('requires a discovered delegating SV party', async () => {
