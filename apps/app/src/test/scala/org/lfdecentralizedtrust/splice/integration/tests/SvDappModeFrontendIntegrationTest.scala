@@ -210,6 +210,23 @@ class SvDappModeFrontendIntegrationTest
         val dsoRules = dsoInfo.dsoRules
 
         try {
+          // Gateway self_signed tokens use sub=alice_wallet_user. Canton rejects
+          // JWTs for unknown users (UserNotFound → 403), which surfaces as
+          // addSession "Failed to add session" / "Client version missing".
+          // The wallet-app-client config names this user but does not create it.
+          clue("ensure gateway auth ledger user exists on alice") {
+            val users = aliceValidatorBackend.participantClientWithAdminToken.ledger_api.users
+            if (!users.list().users.exists(_.id == walletGatewayAuthClientId)) {
+              users.create(
+                id = walletGatewayAuthClientId,
+                actAs = Set.empty,
+                primaryParty = None,
+                readAs = Set.empty,
+                participantAdmin = true,
+              )
+            }
+          }
+
           val voterParty = clue("start wallet gateway and allocate participant-signed voter") {
             startWalletGateway()
             createParticipantWallet(partyHint = s"dapp-voter-${System.currentTimeMillis()}")

@@ -210,6 +210,10 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
 
   /** Mint a self-signed user token, open a network session, and allocate a
     * participant-signed wallet. Returns the new ledger party id.
+    *
+    * The ledger user named by [[walletGatewayAuthClientId]] must already exist
+    * on the participant; otherwise Canton returns 403 UserNotFound and
+    * `addSession` fails with "Failed to add session".
     */
   protected def createParticipantWallet(partyHint: String): PartyId = {
     val accessToken = selfSignedAccessToken(walletGatewayAuthClientId)
