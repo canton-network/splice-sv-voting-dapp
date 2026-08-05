@@ -19,8 +19,7 @@ import org.lfdecentralizedtrust.splice.integration.InitialPackageVersions
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.CloseVoteRequestTrigger
 import org.lfdecentralizedtrust.splice.util.*
-import org.openqa.selenium.{By, WebDriver}
-import org.openqa.selenium.support.ui.{ExpectedConditions, Select, WebDriverWait}
+import org.openqa.selenium.{JavascriptExecutor, WebDriver}
 import org.slf4j.event.Level
 
 import java.util.Optional
@@ -91,17 +90,140 @@ class SvDappModeFrontendIntegrationTest
       .id
   }
 
-  // --- Selenium helpers for gateway popups (this test only) ---
+  // --- Selenium helpers for CIP-103 / Lit shadow-DOM gateway popups ---
 
-  private def switchToNewestWindow(implicit webDriver: WebDriver): String = {
-    val handles = webDriver.getWindowHandles.asScala.toSeq
-    val newest = handles.last
-    webDriver.switchTo().window(newest)
-    newest
-  }
+  private def js(implicit webDriver: WebDriver): JavascriptExecutor =
+    webDriver.asInstanceOf[JavascriptExecutor]
+
+  /** Deep querySelector across open shadow roots (Lit wallet UI). */
+  private val deepQueryJs: String =
+    """
+    function queryDeep(sel, root) {
+      const direct = root.querySelector(sel);
+      if (direct) return direct;
+      const all = root.querySelectorAll('*');
+      for (let i = 0; i < all.length; i++) {
+        const el = all[i];
+        if (el.shadowRoot) {
+          const found = queryDeep(sel, el.shadowRoot);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+    """
+
+  private def shadowExists(selector: String)(implicit webDriver: WebDriver): Boolean =
+    Option(
+      js.executeScript(
+        deepQueryJs + "return !!queryDeep(arguments[0], document);",
+        selector,
+      )
+    ).exists(_.asInstanceOf[Boolean])
+
+  private def shadowClick(selector: String)(implicit webDriver: WebDriver): Boolean =
+    Option(
+      js.executeScript(
+        deepQueryJs +
+          """
+          const el = queryDeep(arguments[0], document);
+          if (!el) return false;
+          el.click();
+          return true;
+          """,
+        selector,
+      )
+    ).exists(_.asInstanceOf[Boolean])
+
+  private def shadowSetValue(selector: String, value: String)(implicit
+      webDriver: WebDriver
+  ): Boolean =
+    Option(
+      js.executeScript(
+        deepQueryJs +
+          """
+          const el = queryDeep(arguments[0], document);
+          if (!el) return false;
+          el.focus();
+          el.value = arguments[1];
+          el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+          return true;
+          """,
+        selector,
+        value,
+      )
+    ).exists(_.asInstanceOf[Boolean])
+
+  private def shadowSelectByVisibleText(selector: String, label: String)(implicit
+      webDriver: WebDriver
+  ): Boolean =
+    Option(
+      js.executeScript(
+        deepQueryJs +
+          """
+          const sel = queryDeep(arguments[0], document);
+          if (!sel || !sel.options) return false;
+          const wanted = arguments[1];
+          for (let i = 0; i < sel.options.length; i++) {
+            const opt = sel.options[i];
+            const text = (opt.textContent || opt.text || '').replace(/\s+/g, ' ').trim();
+            if (text === wanted) {
+              sel.value = opt.value;
+              sel.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+              sel.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+              return true;
+            }
+          }
+          return false;
+          """,
+        selector,
+        label,
+      )
+    ).exists(_.asInstanceOf[Boolean])
+
+  private def shadowClickButtonNamed(name: String)(implicit webDriver: WebDriver): Boolean =
+    Option(
+      js.executeScript(
+        """
+        function findButton(text, root) {
+          const buttons = root.querySelectorAll('button');
+          for (let i = 0; i < buttons.length; i++) {
+            const t = (buttons[i].textContent || '').replace(/\s+/g, ' ').trim();
+            if ((t === text || t.includes(text)) && !buttons[i].disabled) {
+              return buttons[i];
+            }
+          }
+          const all = root.querySelectorAll('*');
+          for (let i = 0; i < all.length; i++) {
+            if (all[i].shadowRoot) {
+              const found = findButton(text, all[i].shadowRoot);
+              if (found) return found;
+            }
+          }
+          return null;
+        }
+        const el = findButton(arguments[0], document);
+        if (!el) return false;
+        el.click();
+        return true;
+        """,
+        name,
+      )
+    ).exists(_.asInstanceOf[Boolean])
 
   private def switchToWindow(handle: String)(implicit webDriver: WebDriver): Unit =
     webDriver.switchTo().window(handle)
+
+  private def switchToWindowWithShadow(selector: String, exclude: String)(implicit
+      webDriver: WebDriver
+  ): Option[String] =
+    webDriver.getWindowHandles.asScala
+      .filterNot(_ == exclude)
+      .find { h =>
+        webDriver.switchTo().window(h)
+        shadowExists(selector)
+      }
 
   private def waitForWindowClose(handle: String, timeout: FiniteDuration = 30.seconds)(implicit
       webDriver: WebDriver
@@ -109,26 +231,6 @@ class SvDappModeFrontendIntegrationTest
     eventually(timeUntilSuccess = timeout) {
       webDriver.getWindowHandles.asScala.contains(handle) shouldBe false
     }
-
-  private def clickButtonNamed(name: String)(implicit webDriver: WebDriver): Unit = {
-    val wait = new WebDriverWait(webDriver, java.time.Duration.ofSeconds(20))
-    val button = wait.until(
-      ExpectedConditions.elementToBeClickable(
-        By.xpath(
-          s"//button[normalize-space()='$name' or contains(normalize-space(.), '$name')]"
-        )
-      )
-    )
-    button.click()
-  }
-
-  private def selectNetworkByLabel(networkLabel: String)(implicit webDriver: WebDriver): Unit = {
-    eventually(timeUntilSuccess = 20.seconds) {
-      val selects = webDriver.findElements(By.cssSelector("select#network, select")).asScala
-      selects.nonEmpty shouldBe true
-      new Select(selects.head).selectByVisibleText(networkLabel)
-    }
-  }
 
   /** Drive CIP-103 connect against the preconfigured RemoteAdapter RPC URL. */
   private def connectWalletThroughGateway()(implicit webDriver: WebDriver): Unit = {
@@ -140,60 +242,88 @@ class SvDappModeFrontendIntegrationTest
     eventually(timeUntilSuccess = 30.seconds) {
       webDriver.getWindowHandles.size should be > handlesBefore.size
     }
-    switchToNewestWindow
 
-    // Wallet picker may offer a custom URL field; RemoteAdapter is already
-    // configured, but selecting/adding the RPC keeps the flow aligned with
-    // DA's WalletGatewayPage helper.
-    val customUrlInputs = webDriver.findElements(By.cssSelector(".custom-url-input")).asScala
-    if (customUrlInputs.nonEmpty) {
-      customUrlInputs.head.clear()
-      customUrlInputs.head.sendKeys(walletGatewayDappApi)
-      webDriver.findElements(By.cssSelector(".btn-add")).asScala.headOption.foreach(_.click())
-    } else {
-      webDriver.findElements(By.cssSelector(".wallet-card")).asScala.headOption.foreach(_.click())
-    }
-
-    // Connect form may replace the picker in-place or open a new popup.
-    eventually(timeUntilSuccess = 30.seconds) {
-      val networkSelects =
-        webDriver.findElements(By.cssSelector("select#network, select")).asScala
-      if (networkSelects.isEmpty && webDriver.getWindowHandles.size > handlesBefore.size) {
-        switchToNewestWindow
-      }
-      webDriver
-        .findElements(By.cssSelector("select#network, select"))
-        .asScala
-        .nonEmpty shouldBe true
-    }
-
-    // Self-signed login may ask for a client id (defaults from network config).
-    webDriver.findElements(By.cssSelector("input")).asScala.foreach { input =>
-      val `type` = Option(input.getAttribute("type")).getOrElse("")
-      val name = Option(input.getAttribute("name")).getOrElse("").toLowerCase
-      val label = Option(input.getAttribute("aria-label")).getOrElse("").toLowerCase
-      if (
-        `type` != "hidden" &&
-        (name.contains("client") || label.contains("client") || label.contains("user"))
-      ) {
-        input.clear()
-        input.sendKeys(walletGatewayAuthClientId)
+    // Picker is Lit <popup-content> with open shadow DOM — light-DOM queries miss it.
+    clue("select CIP-103 RPC in shadowed wallet picker") {
+      eventually(timeUntilSuccess = 20.seconds) {
+        switchToWindowWithShadow(
+          """[aria-label="Connect to CIP-103 RPC"], .wallet-card, .custom-url-input""",
+          mainWindow,
+        ).nonEmpty shouldBe true
+        val clicked =
+          shadowClick("""[aria-label="Connect to CIP-103 RPC"]""") ||
+            shadowClick(".wallet-card") || {
+              if (shadowExists(".custom-url-input")) {
+                shadowSetValue(".custom-url-input", walletGatewayDappApi) &&
+                (shadowClick(".btn-add") || shadowClickButtonNamed("Connect"))
+              } else false
+            }
+        clicked shouldBe true
       }
     }
 
-    selectNetworkByLabel(walletGatewayNetworkName)
-    clickButtonNamed("Connect")
+    clue("complete wallet gateway self-signed login") {
+      val loginWindow = eventually(timeUntilSuccess = 45.seconds) {
+        val handle = switchToWindowWithShadow("#network-select", mainWindow)
+        handle.nonEmpty shouldBe true
+        handle.value
+      }
+      switchToWindow(loginWindow)
+      // Form auto-selects the first usable network; force the IT network by label.
+      eventually(timeUntilSuccess = 20.seconds) {
+        shadowSelectByVisibleText("#network-select", walletGatewayNetworkName) shouldBe true
+      }
+      // Client ID defaults from network config; set explicitly if the field is present.
+      if (shadowExists("#client-id")) {
+        shadowSetValue("#client-id", walletGatewayAuthClientId) shouldBe true
+      }
+      eventually(timeUntilSuccess = 20.seconds) {
+        shadowClickButtonNamed("Connect") shouldBe true
+      }
+    }
+
     switchToWindow(mainWindow)
   }
 
+  private def shadowHasButtonNamed(name: String)(implicit webDriver: WebDriver): Boolean =
+    Option(
+      js.executeScript(
+        """
+        function hasButton(text, root) {
+          const buttons = root.querySelectorAll('button');
+          for (let i = 0; i < buttons.length; i++) {
+            const t = (buttons[i].textContent || '').replace(/\s+/g, ' ').trim();
+            if (t === text || t.includes(text)) return true;
+          }
+          const all = root.querySelectorAll('*');
+          for (let i = 0; i < all.length; i++) {
+            if (all[i].shadowRoot && hasButton(text, all[i].shadowRoot)) return true;
+          }
+          return false;
+        }
+        return hasButton(arguments[0], document);
+        """,
+        name,
+      )
+    ).exists(_.asInstanceOf[Boolean])
+
   private def approveGatewayTransaction()(implicit webDriver: WebDriver): Unit = {
     val mainWindow = webDriver.getWindowHandle
-    eventually(timeUntilSuccess = 45.seconds) {
-      webDriver.getWindowHandles.size should be > 1
+    val approveWindow = eventually(timeUntilSuccess = 45.seconds) {
+      val handle = webDriver.getWindowHandles.asScala
+        .filterNot(_ == mainWindow)
+        .find { h =>
+          webDriver.switchTo().window(h)
+          shadowHasButtonNamed("Approve")
+        }
+      handle.nonEmpty shouldBe true
+      handle.value
     }
-    val popup = switchToNewestWindow
-    clickButtonNamed("Approve")
-    waitForWindowClose(popup)
+    switchToWindow(approveWindow)
+    eventually(timeUntilSuccess = 20.seconds) {
+      shadowClickButtonNamed("Approve") shouldBe true
+    }
+    waitForWindowClose(approveWindow)
     switchToWindow(mainWindow)
   }
 
@@ -228,7 +358,8 @@ class SvDappModeFrontendIntegrationTest
           }
 
           val voterParty = clue("start wallet gateway and allocate participant-signed voter") {
-            startWalletGateway()
+            // Pin global-domain: alice's connectedSynchronizers[0] is splitwell.
+            startWalletGateway(decentralizedSynchronizerId.toProtoPrimitive)
             createParticipantWallet(partyHint = s"dapp-voter-${System.currentTimeMillis()}")
           }
 

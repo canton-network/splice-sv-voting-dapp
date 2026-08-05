@@ -57,8 +57,13 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
   /** Fresh sqlite files under `dir` so the gateway treats the DB as new and
     * runs config bootstrap (idp + network). `"type": "memory"` skips bootstrap
     * in wallet-gateway-remote@1.6.0 because `exists` defaults to true.
+    *
+    * @param synchronizerId must be the global / decentralized synchronizer.
+    *   Without it, wallet-gateway-remote picks `connectedSynchronizers[0]`,
+    *   which for alice is `splitwell`, and SV create of VoteDelegation then
+    *   fails with UNKNOWN_INFORMEES.
     */
-  protected def walletGatewayConfigJson(dir: Path): String = {
+  protected def walletGatewayConfigJson(dir: Path, synchronizerId: String): String = {
     val storeDb = dir.resolve("store.sqlite").toAbsolutePath.toString
     val signingDb = dir.resolve("signing.sqlite").toAbsolutePath.toString
     s"""
@@ -87,6 +92,7 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
        |        "name": "$walletGatewayNetworkName",
        |        "description": "Splice IntegrationTest alice participant (self-signed HS256)",
        |        "identityProviderId": "idp-splice-it",
+       |        "synchronizerId": "$synchronizerId",
        |        "auth": {
        |          "method": "self_signed",
        |          "issuer": "self-signed",
@@ -111,13 +117,17 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
        |""".stripMargin
   }
 
-  protected def startWalletGateway(): Unit = {
+  protected def startWalletGateway(synchronizerId: String): Unit = {
     stopWalletGateway()
     val dir = Files.createTempDirectory("splice-wallet-gateway-")
     gatewayConfigDir.set(Some(dir))
     val configPath = dir.resolve("config.json")
     val logPath = dir.resolve("gateway.log")
-    Files.writeString(configPath, walletGatewayConfigJson(dir), StandardCharsets.UTF_8)
+    Files.writeString(
+      configPath,
+      walletGatewayConfigJson(dir, synchronizerId),
+      StandardCharsets.UTF_8,
+    )
 
     // Resolve npx from PATH (nix/direnv in CI and local). Cold `npx -y` can take
     // well over a minute on first download; keep the readiness wait generous.
