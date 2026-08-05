@@ -54,7 +54,13 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
   private val httpClient: HttpClient =
     HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()
 
-  protected def walletGatewayConfigJson: String =
+  /** Fresh sqlite files under `dir` so the gateway treats the DB as new and
+    * runs config bootstrap (idp + network). `"type": "memory"` skips bootstrap
+    * in wallet-gateway-remote@1.6.0 because `exists` defaults to true.
+    */
+  protected def walletGatewayConfigJson(dir: Path): String = {
+    val storeDb = dir.resolve("store.sqlite").toAbsolutePath.toString
+    val signingDb = dir.resolve("signing.sqlite").toAbsolutePath.toString
     s"""
        |{
        |  "kernel": { "id": "remote-da", "clientType": "remote" },
@@ -69,8 +75,8 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
        |    "trustProxy": false,
        |    "admin": "sub"
        |  },
-       |  "store": { "connection": { "type": "memory" } },
-       |  "signingStore": { "connection": { "type": "memory" } },
+       |  "store": { "connection": { "type": "sqlite", "database": "$storeDb" } },
+       |  "signingStore": { "connection": { "type": "sqlite", "database": "$signingDb" } },
        |  "bootstrap": {
        |    "idps": [
        |      { "id": "idp-splice-it", "type": "self_signed", "issuer": "unsafe-auth" }
@@ -103,6 +109,7 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
        |  }
        |}
        |""".stripMargin
+  }
 
   protected def startWalletGateway(): Unit = {
     stopWalletGateway()
@@ -110,7 +117,7 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
     gatewayConfigDir.set(Some(dir))
     val configPath = dir.resolve("config.json")
     val logPath = dir.resolve("gateway.log")
-    Files.writeString(configPath, walletGatewayConfigJson, StandardCharsets.UTF_8)
+    Files.writeString(configPath, walletGatewayConfigJson(dir), StandardCharsets.UTF_8)
 
     // Resolve npx from PATH (nix/direnv in CI and local). Cold `npx -y` can take
     // well over a minute on first download; keep the readiness wait generous.
