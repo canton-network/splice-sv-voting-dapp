@@ -11,6 +11,7 @@ import io.circe.syntax.*
 import org.lfdecentralizedtrust.splice.util.ProcessTestUtil
 import org.scalatest.Suite
 
+import java.io.IOException
 import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.charset.StandardCharsets
@@ -18,6 +19,7 @@ import java.nio.file.{Files, Path}
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.*
+import scala.jdk.CollectionConverters.*
 import scala.util.Using
 import scala.util.control.NonFatal
 
@@ -107,40 +109,97 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
     val dir = Files.createTempDirectory("splice-wallet-gateway-")
     gatewayConfigDir.set(Some(dir))
     val configPath = dir.resolve("config.json")
+    val logPath = dir.resolve("gateway.log")
     Files.writeString(configPath, walletGatewayConfigJson, StandardCharsets.UTF_8)
 
-    val proc = ProcessTestUtil.startProcess(
-      Seq("npx", "-y", walletGatewayPackage, "-c", configPath.toString),
-      extraEnv = Seq.empty,
-      outputFile = Some(dir.resolve("gateway.log").toFile),
+    // Resolve npx from PATH (nix/direnv in CI and local). Cold `npx -y` can take
+    // well over a minute on first download; keep the readiness wait generous.
+    val npx = sys.env
+      .get("PATH")
+      .toList
+      .flatMap(_.split(java.io.File.pathSeparatorChar).toList)
+      .map(dirName => java.nio.file.Paths.get(dirName, "npx"))
+      .find(Files.isExecutable)
+      .map(_.toString)
+      .getOrElse("npx")
+
+    val builder = new ProcessBuilder(
+      npx,
+      "-y",
+      walletGatewayPackage,
+      "-c",
+      configPath.toString,
     )
-    gatewayProcess.set(Some(proc))
-    eventually(timeUntilSuccess = 2.minutes) {
-      val status = httpClient
-        .send(
-          HttpRequest
-            .newBuilder(URI.create(s"http://localhost:$walletGatewayPort/readyz"))
-            .GET()
-            .build(),
-          HttpResponse.BodyHandlers.ofString(),
+    builder.redirectErrorStream(true)
+    builder.redirectOutput(logPath.toFile)
+    val javaProc = builder.start()
+    gatewayProcess.set(Some(ProcessTestUtil.Process(javaProc)))
+
+    try {
+      eventually(timeUntilSuccess = 4.minutes) {
+        if (!javaProc.isAlive) {
+          fail(
+            s"wallet-gateway process exited early (code=${javaProc.exitValue()}). Log:\n${gatewayLogTail(logPath)}"
+          )
+        }
+        val status =
+          try {
+            httpClient
+              .send(
+                HttpRequest
+                  .newBuilder(URI.create(s"http://localhost:$walletGatewayPort/readyz"))
+                  .GET()
+                  .build(),
+                HttpResponse.BodyHandlers.ofString(),
+              )
+              .statusCode()
+          } catch {
+            // ConnectException is not retryable in BaseTest.eventually by default;
+            // convert to an assertion failure so we keep polling through cold npx.
+            case e: IOException =>
+              fail(
+                s"wallet-gateway not ready yet on :$walletGatewayPort (${e.getClass.getSimpleName})"
+              )
+          }
+        status shouldBe 200
+      }
+    } catch {
+      case NonFatal(e) =>
+        stopWalletGateway(deleteDir = false)
+        fail(
+          s"wallet-gateway failed to become ready on :$walletGatewayPort. Log at $logPath:\n${gatewayLogTail(logPath)}",
+          e,
         )
-        .statusCode()
-      status shouldBe 200
     }
   }
 
-  protected def stopWalletGateway(): Unit = {
-    gatewayProcess.getAndSet(None).foreach(_.destroyAndWait())
-    gatewayConfigDir.getAndSet(None).foreach { dir =>
-      try {
-        Using.resource(java.nio.file.Files.walk(dir)) { stream =>
-          stream.sorted(java.util.Comparator.reverseOrder()).forEach(Files.deleteIfExists)
+  protected def stopWalletGateway(deleteDir: Boolean = true): Unit = {
+    gatewayProcess.getAndSet(None).foreach { proc =>
+      proc.destroyAndWait()
+    }
+    if (deleteDir) {
+      gatewayConfigDir.getAndSet(None).foreach { dir =>
+        try {
+          Using.resource(java.nio.file.Files.walk(dir)) { stream =>
+            stream.sorted(java.util.Comparator.reverseOrder()).forEach(Files.deleteIfExists)
+          }
+        } catch {
+          case NonFatal(_) => // best-effort cleanup
         }
-      } catch {
-        case NonFatal(_) => // best-effort cleanup
       }
+    } else {
+      gatewayConfigDir.set(None)
     }
   }
+
+  private def gatewayLogTail(logPath: Path, maxLines: Int = 80): String =
+    if (!Files.exists(logPath)) "<missing gateway.log>"
+    else
+      Files
+        .readAllLines(logPath, StandardCharsets.UTF_8)
+        .asScala
+        .takeRight(maxLines)
+        .mkString("\n")
 
   /** Mint a self-signed user token, open a network session, and allocate a
     * participant-signed wallet. Returns the new ledger party id.

@@ -209,12 +209,12 @@ class SvDappModeFrontendIntegrationTest
         val dsoParty = dsoInfo.dsoParty
         val dsoRules = dsoInfo.dsoRules
 
-        val voterParty = clue("start wallet gateway and allocate participant-signed voter") {
-          startWalletGateway()
-          createParticipantWallet(partyHint = s"dapp-voter-${System.currentTimeMillis()}")
-        }
-
         try {
+          val voterParty = clue("start wallet gateway and allocate participant-signed voter") {
+            startWalletGateway()
+            createParticipantWallet(partyHint = s"dapp-voter-${System.currentTimeMillis()}")
+          }
+
           clue("SV creates VoteDelegation for the gateway-allocated voter") {
             createVoteDelegation(sv1Party, dsoParty, voterParty)
           }
