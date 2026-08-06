@@ -161,5 +161,6 @@ of the suite (`npm test`). Scan reads are mocked with msw
 the `dappSdkClient` seam.
 
 For a LocalNet walkthrough (manual e2e), see the root
-[`DEMO_RUNBOOK.md`](../../../../../DEMO_RUNBOOK.md). For the planned automated
-integration-test scope, see [`E2E_SCOPE.md`](./E2E_SCOPE.md).
+[`DEMO_RUNBOOK.md`](../../../../../DEMO_RUNBOOK.md). Automated coverage is in
+`VoteDelegationIntegrationTest` (ledger path) and
+`SvDappModeFrontendIntegrationTest` (UI + wallet gateway).
