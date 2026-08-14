@@ -39,8 +39,8 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
   protected val walletGatewayNetworkName: String = "Splice IT"
   protected val walletGatewayUserApi: String = s"http://localhost:$walletGatewayPort/api/v0/user"
   protected val walletGatewayDappApi: String = s"http://localhost:$walletGatewayPort/api/v0/dapp"
-  protected val walletGatewayPackage: String =
-    "@canton-network/wallet-gateway-remote@1.6.0"
+  // Workspace bin from `npm ci` in apps/ (see apps/package.json).
+  protected val walletGatewayBin: Path = Path.of("apps/node_modules/.bin/wallet-gateway")
 
   // Match include/validators/alice-validator.conf + simple-topology-canton.conf.
   protected val walletGatewayLedgerApiBaseUrl: String = "http://127.0.0.1:6501"
@@ -56,7 +56,7 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
 
   /** Fresh sqlite files under `dir` so the gateway treats the DB as new and
     * runs config bootstrap (idp + network). `"type": "memory"` skips bootstrap
-    * in wallet-gateway-remote@1.6.0 because `exists` defaults to true.
+    * in wallet-gateway-remote because `exists` defaults to true.
     *
     * @param synchronizerId must be the global / decentralized synchronizer.
     *   Without it, wallet-gateway-remote picks `connectedSynchronizers[0]`,
@@ -129,21 +129,11 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
       StandardCharsets.UTF_8,
     )
 
-    // Resolve npx from PATH (nix/direnv in CI and local). Cold `npx -y` can take
-    // well over a minute on first download; keep the readiness wait generous.
-    val npx = sys.env
-      .get("PATH")
-      .toList
-      .flatMap(_.split(java.io.File.pathSeparatorChar).toList)
-      .map(dirName => java.nio.file.Paths.get(dirName, "npx"))
-      .find(Files.isExecutable)
-      .map(_.toString)
-      .getOrElse("npx")
-
+    if (!Files.isExecutable(walletGatewayBin)) {
+      fail(s"$walletGatewayBin is missing; run npm install in apps/")
+    }
     val builder = new ProcessBuilder(
-      npx,
-      "-y",
-      walletGatewayPackage,
+      walletGatewayBin.toString,
       "-c",
       configPath.toString,
     )
@@ -172,7 +162,7 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
               .statusCode()
           } catch {
             // ConnectException is not retryable in BaseTest.eventually by default;
-            // convert to an assertion failure so we keep polling through cold npx.
+            // convert to an assertion failure so we keep polling until listen.
             case e: IOException =>
               fail(
                 s"wallet-gateway not ready yet on :$walletGatewayPort (${e.getClass.getSimpleName})"
