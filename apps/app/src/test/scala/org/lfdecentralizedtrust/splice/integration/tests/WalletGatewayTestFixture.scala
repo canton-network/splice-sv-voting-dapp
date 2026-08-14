@@ -118,7 +118,11 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
   }
 
   protected def startWalletGateway(synchronizerId: String): Unit = {
-    stopWalletGateway()
+    gatewayProcess.get().foreach { _ =>
+      fail(
+        "wallet-gateway is already running; stop the existing process before starting another"
+      )
+    }
     val dir = Files.createTempDirectory("splice-wallet-gateway-")
     gatewayConfigDir.set(Some(dir))
     val configPath = dir.resolve("config.json")
