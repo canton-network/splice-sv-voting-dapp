@@ -19,7 +19,6 @@ import java.nio.file.{Files, Path}
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.*
-import scala.jdk.CollectionConverters.*
 import scala.util.Using
 import scala.util.control.NonFatal
 
@@ -41,6 +40,9 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
   protected val walletGatewayDappApi: String = s"http://localhost:$walletGatewayPort/api/v0/dapp"
   // Workspace bin from `npm ci` in apps/ (see apps/package.json).
   protected val walletGatewayBin: Path = Path.of("apps/node_modules/.bin/wallet-gateway")
+  // Stable, gitignored paths so CI exports the log and local runs are inspectable.
+  protected val walletGatewayDir: Path = Path.of("apps/app/src/test/resources/wallet-gateway")
+  protected val walletGatewayLog: Path = Path.of("log/wallet-gateway.log")
 
   // Match include/validators/alice-validator.conf + simple-topology-canton.conf.
   protected val walletGatewayLedgerApiBaseUrl: String = "http://127.0.0.1:6501"
@@ -50,7 +52,6 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
   protected val walletGatewayAudience: String = "https://canton.network.global"
 
   private val gatewayProcess = new AtomicReference[Option[ProcessTestUtil.Process]](None)
-  private val gatewayConfigDir = new AtomicReference[Option[Path]](None)
   private val httpClient: HttpClient =
     HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()
 
@@ -123,13 +124,12 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
         "wallet-gateway is already running; stop the existing process before starting another"
       )
     }
-    val dir = Files.createTempDirectory("splice-wallet-gateway-")
-    gatewayConfigDir.set(Some(dir))
-    val configPath = dir.resolve("config.json")
-    val logPath = dir.resolve("gateway.log")
+    resetWalletGatewayDir()
+    Files.createDirectories(walletGatewayLog.getParent)
+    val configPath = walletGatewayDir.resolve("config.json")
     Files.writeString(
       configPath,
-      walletGatewayConfigJson(dir, synchronizerId),
+      walletGatewayConfigJson(walletGatewayDir, synchronizerId),
       StandardCharsets.UTF_8,
     )
 
@@ -142,7 +142,7 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
       configPath.toString,
     )
     builder.redirectErrorStream(true)
-    builder.redirectOutput(logPath.toFile)
+    builder.redirectOutput(walletGatewayLog.toFile)
     val javaProc = builder.start()
     gatewayProcess.set(Some(ProcessTestUtil.Process(javaProc)))
 
@@ -150,7 +150,7 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
       eventually(timeUntilSuccess = 4.minutes) {
         if (!javaProc.isAlive) {
           fail(
-            s"wallet-gateway process exited early (code=${javaProc.exitValue()}). Log:\n${gatewayLogTail(logPath)}"
+            s"wallet-gateway process exited early (code=${javaProc.exitValue()}). See $walletGatewayLog"
           )
         }
         val status =
@@ -176,41 +176,30 @@ trait WalletGatewayTestFixture extends ProcessTestUtil { this: Suite & BaseTest 
       }
     } catch {
       case NonFatal(e) =>
-        stopWalletGateway(deleteDir = false)
+        stopWalletGateway()
         fail(
-          s"wallet-gateway failed to become ready on :$walletGatewayPort. Log at $logPath:\n${gatewayLogTail(logPath)}",
+          s"wallet-gateway failed to become ready on :$walletGatewayPort. See $walletGatewayLog",
           e,
         )
     }
   }
 
-  protected def stopWalletGateway(deleteDir: Boolean = true): Unit = {
+  protected def stopWalletGateway(): Unit = {
     gatewayProcess.getAndSet(None).foreach { proc =>
       proc.destroyAndWait()
     }
-    if (deleteDir) {
-      gatewayConfigDir.getAndSet(None).foreach { dir =>
-        try {
-          Using.resource(java.nio.file.Files.walk(dir)) { stream =>
-            stream.sorted(java.util.Comparator.reverseOrder()).forEach(Files.deleteIfExists)
-          }
-        } catch {
-          case NonFatal(_) => // best-effort cleanup
-        }
-      }
-    } else {
-      gatewayConfigDir.set(None)
-    }
   }
 
-  private def gatewayLogTail(logPath: Path, maxLines: Int = 80): String =
-    if (!Files.exists(logPath)) "<missing gateway.log>"
-    else
-      Files
-        .readAllLines(logPath, StandardCharsets.UTF_8)
-        .asScala
-        .takeRight(maxLines)
-        .mkString("\n")
+  private def resetWalletGatewayDir(): Unit = {
+    Files.createDirectories(walletGatewayDir)
+    Using.resource(Files.list(walletGatewayDir)) { stream =>
+      stream.forEach { path =>
+        if (path.getFileName.toString != ".gitignore") {
+          Files.deleteIfExists(path)
+        }
+      }
+    }
+  }
 
   /** Mint a self-signed user token, open a network session, and allocate a
     * participant-signed wallet. Returns the new ledger party id.
