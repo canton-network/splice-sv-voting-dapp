@@ -273,12 +273,17 @@ class SvDappModeFrontendIntegrationTest
       eventually(timeUntilSuccess = 20.seconds) {
         shadowSelectByVisibleText("#network-select", walletGatewayNetworkName) shouldBe true
       }
-      // Client ID defaults from network config; set explicitly if the field is present.
-      if (shadowExists("#client-id")) {
-        shadowSetValue("#client-id", walletGatewayAuthClientId) shouldBe true
+      // #client-id appears only after the self_signed IDP is bound.
+      eventually(timeUntilSuccess = 20.seconds) {
+        shadowExists("#client-id") shouldBe true
       }
+      shadowSetValue("#client-id", walletGatewayAuthClientId) shouldBe true
       eventually(timeUntilSuccess = 20.seconds) {
         shadowClickButtonNamed("Connect") shouldBe true
+      }
+      eventually(timeUntilSuccess = 45.seconds) {
+        switchToWindow(loginWindow)
+        webDriver.getCurrentUrl should not include "/login"
       }
     }
 
