@@ -25,4 +25,12 @@ window.splice_config = {
     nameServiceName: 'Amulet Name Service',
     nameServiceNameAcronym: 'ANS',
   },
+
+  // Optional dApp mode: CIP-103 wallet login, Scan reads, VoteDelegation submissions.
+  // Uncomment and point at a reachable Scan + CIP-103 RPC to try locally.
+  // dappMode: {
+  //   enabled: 'true',
+  //   scanUrl: 'http://scan.localhost:4000/api/scan',
+  //   cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
+  // },
 };

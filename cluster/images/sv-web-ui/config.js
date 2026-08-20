@@ -20,4 +20,13 @@ window.splice_config = {
     nameServiceName: "${SPLICE_APP_UI_NAME_SERVICE_NAME}",
     nameServiceNameAcronym: "${SPLICE_APP_UI_NAME_SERVICE_NAME_ACRONYM}",
   },
+  // dApp mode: run the governance UI backend-less. Login goes through a
+  // CIP-103 RPC endpoint, reads come from Scan, and vote submissions are
+  // exercised on a VoteDelegation contract through the dApp API. Unset (or
+  // any value other than "true") leaves the app in standard mode.
+  dappMode: {
+    enabled: "${SPLICE_APP_UI_DAPP_MODE_ENABLED}",
+    scanUrl: "${SPLICE_APP_UI_DAPP_MODE_SCAN_URL}",
+    cip103RpcUrl: "${SPLICE_APP_UI_DAPP_MODE_CIP103_RPC_URL}",
+  },
 };
