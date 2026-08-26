@@ -1,8 +1,10 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import { IdentifierFilter } from '@canton-network/canton-json-api-v2-openapi';
 import { VoteDelegation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/VoteDelegation';
 
 import { DappSdkClient } from './dappSdkClient';
+import { createLedgerJsonApi } from './ledgerJsonApi';
 import { getVoteDelegationTemplateId } from './voteDelegationCommands';
 
 export type VoteDelegationDiscoveryFailureCode = 'none' | 'ambiguous' | 'ledger';
@@ -24,52 +26,6 @@ export interface DiscoveredVoteDelegation {
   readonly voterPartyId: string;
 }
 
-interface CreatedEventLike {
-  contractId: string;
-  createArgument: unknown;
-}
-
-interface ActiveContractEntry {
-  contractEntry?: {
-    JsActiveContract?: {
-      createdEvent?: {
-        contractId?: unknown;
-        createArgument?: unknown;
-      };
-    };
-  };
-}
-
-const parseLedgerEndOffset = (result: unknown): number | undefined => {
-  if (typeof result !== 'object' || result === null) {
-    return undefined;
-  }
-  const offset = (result as { offset?: unknown }).offset;
-  return typeof offset === 'number' ? offset : undefined;
-};
-
-const extractCreatedEvents = (result: unknown): CreatedEventLike[] => {
-  const entries: ActiveContractEntry[] = Array.isArray(result)
-    ? (result as ActiveContractEntry[])
-    : typeof result === 'object' &&
-        result !== null &&
-        Array.isArray((result as { contractEntries?: unknown }).contractEntries)
-      ? (result as { contractEntries: ActiveContractEntry[] }).contractEntries
-      : [];
-
-  return entries.flatMap(entry => {
-    const event = entry.contractEntry?.JsActiveContract?.createdEvent;
-    if (
-      event === undefined ||
-      typeof event.contractId !== 'string' ||
-      event.createArgument === undefined
-    ) {
-      return [];
-    }
-    return [{ contractId: event.contractId, createArgument: event.createArgument }];
-  });
-};
-
 /**
  * Query the connected wallet party's ACS for VoteDelegation contracts and
  * require exactly one match. The delegating SV party and contract id are taken
@@ -81,13 +37,11 @@ export async function discoverVoteDelegation(args: {
 }): Promise<DiscoveredVoteDelegation> {
   const { sdkClient, voterPartyId } = args;
   const templateId = getVoteDelegationTemplateId();
+  const ledger = createLedgerJsonApi(sdkClient);
 
-  let ledgerEnd: unknown;
+  let activeAtOffset: number | undefined;
   try {
-    ledgerEnd = await sdkClient.ledgerApi({
-      requestMethod: 'get',
-      resource: '/v2/state/ledger-end',
-    });
+    ({ offset: activeAtOffset } = await ledger.getV2StateLedgerEnd());
   } catch (error) {
     throw new VoteDelegationDiscoveryError(
       `Failed to read ledger end while discovering VoteDelegation: ${
@@ -97,7 +51,6 @@ export async function discoverVoteDelegation(args: {
     );
   }
 
-  const activeAtOffset = parseLedgerEndOffset(ledgerEnd);
   if (activeAtOffset === undefined) {
     throw new VoteDelegationDiscoveryError(
       'Ledger end response did not include a usable offset for VoteDelegation ACS discovery.',
@@ -105,31 +58,26 @@ export async function discoverVoteDelegation(args: {
     );
   }
 
-  let acsResult: unknown;
+  let acsResult;
   try {
-    acsResult = await sdkClient.ledgerApi({
-      requestMethod: 'post',
-      resource: '/v2/state/active-contracts',
-      body: {
-        activeAtOffset,
+    acsResult = await ledger.postV2StateActiveContracts({
+      activeAtOffset,
+      eventFormat: {
         verbose: false,
-        eventFormat: {
-          verbose: false,
-          filtersByParty: {
-            [voterPartyId]: {
-              cumulative: [
-                {
-                  identifierFilter: {
-                    TemplateFilter: {
-                      value: {
-                        templateId,
-                        includeCreatedEventBlob: false,
-                      },
+        filtersByParty: {
+          [voterPartyId]: {
+            cumulative: [
+              {
+                identifierFilter: {
+                  TemplateFilter: {
+                    value: {
+                      templateId,
+                      includeCreatedEventBlob: false,
                     },
                   },
-                },
-              ],
-            },
+                } as IdentifierFilter,
+              },
+            ],
           },
         },
       },
@@ -143,14 +91,18 @@ export async function discoverVoteDelegation(args: {
     );
   }
 
-  const matches = extractCreatedEvents(acsResult).flatMap(event => {
-    const payload = VoteDelegation.decoder.runWithException(event.createArgument);
+  const matches = acsResult.flatMap(response => {
+    const createdEvent = response.contractEntry?.JsActiveContract?.createdEvent;
+    if (createdEvent === undefined) {
+      return [];
+    }
+    const payload = VoteDelegation.decoder.runWithException(createdEvent.createArgument);
     if (payload.voterParty !== voterPartyId) {
       return [];
     }
     return [
       {
-        voteDelegationCid: event.contractId,
+        voteDelegationCid: createdEvent.contractId,
         svPartyId: payload.sv,
         voterPartyId,
       } satisfies DiscoveredVoteDelegation,
