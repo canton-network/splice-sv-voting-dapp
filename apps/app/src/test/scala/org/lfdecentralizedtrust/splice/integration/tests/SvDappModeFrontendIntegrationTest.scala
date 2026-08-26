@@ -94,7 +94,7 @@ class SvDappModeFrontendIntegrationTest
       .id
   }
 
-  // --- Selenium helpers for CIP-103 / Lit shadow-DOM gateway popups ---
+  // Lit open-shadow on wallet-gateway and the CIP-103 picker; light-DOM finders miss them.
 
   private def js(implicit webDriver: WebDriver): JavascriptExecutor =
     webDriver.asInstanceOf[JavascriptExecutor]
@@ -247,7 +247,6 @@ class SvDappModeFrontendIntegrationTest
       webDriver.getWindowHandles.size should be > handlesBefore.size
     }
 
-    // Picker is Lit <popup-content> with open shadow DOM — light-DOM queries miss it.
     clue("select CIP-103 RPC in shadowed wallet picker") {
       eventually(timeUntilSuccess = 20.seconds) {
         switchToWindowWithShadow(
