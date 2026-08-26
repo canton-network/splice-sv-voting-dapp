@@ -40,7 +40,6 @@ describe('dappMode config schema', () => {
     expect(dappMode).toBeDefined();
     expect(dappMode?.scanUrl).toBe('http://scan.localhost:4000/api/scan');
     expect(dappMode?.cip103RpcUrl).toBe('http://localhost:3030/api/v0/dapp');
-    expect(dappMode?.dsoGovernancePackageName).toBe('splice-dso-governance');
   });
 
   test("enabled dappMode with string flag 'true' normalizes correctly", () => {
@@ -48,11 +47,8 @@ describe('dappMode config schema', () => {
       enabled: 'true',
       scanUrl: 'http://scan.localhost:4000/api/scan',
       cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
-      dsoGovernancePackageName: 'splice-dso-governance-dev',
     });
-    const dappMode = getDappModeConfig(parsed);
-    expect(dappMode).toBeDefined();
-    expect(dappMode?.dsoGovernancePackageName).toBe('splice-dso-governance-dev');
+    expect(getDappModeConfig(parsed)).toBeDefined();
   });
 
   test("string flag 'false' stays in standard mode", () => {

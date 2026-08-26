@@ -26,13 +26,12 @@ export const DappSvAdminClientProvider: React.FC<React.PropsWithChildren> = ({ c
   const svPartyId = walletSession.svPartyId;
   const voteDelegationCid = walletSession.voteDelegationCid;
   const isWalletConnected = walletSession.status === 'connected';
-  const { scanUrl, cip103RpcUrl, dsoGovernancePackageName } = dappMode;
+  const { scanUrl, cip103RpcUrl } = dappMode;
 
   const client: SvAdminClient = useMemo(() => {
     const dappModeConfig = {
       scanUrl,
       cip103RpcUrl,
-      dsoGovernancePackageName,
     };
     const submission = createVoteDelegationSubmission({
       scanClient,
@@ -53,7 +52,6 @@ export const DappSvAdminClientProvider: React.FC<React.PropsWithChildren> = ({ c
     scanClient,
     scanUrl,
     cip103RpcUrl,
-    dsoGovernancePackageName,
     voterPartyId,
     svPartyId,
     voteDelegationCid,

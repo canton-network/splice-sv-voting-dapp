@@ -11,7 +11,6 @@ import { DappModeConfig } from '../../utils/config';
 const dappMode: DappModeConfig = {
   scanUrl: 'http://scan.localhost:4000/api/scan',
   cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
-  dsoGovernancePackageName: 'splice-dso-governance',
 };
 
 const ACTIVE_SYNCHRONIZER_ID =

@@ -27,8 +27,6 @@ const dappModeEnabledSchema = z.object({
   scanUrl: z.string().min(1),
   // CIP-103 dApp RPC URL (wallet gateway or partner wallet), e.g. http://localhost:3030/api/v0/dapp
   cip103RpcUrl: z.string().min(1),
-  // Override for the dso-governance Daml package name in template ids.
-  dsoGovernancePackageName: z.string().optional(),
 });
 
 const dappModeDisabledSchema = z.object({
@@ -38,7 +36,6 @@ const dappModeDisabledSchema = z.object({
     .transform(() => false as const),
   scanUrl: z.string().optional(),
   cip103RpcUrl: z.string().optional(),
-  dsoGovernancePackageName: z.string().optional(),
 });
 
 export const dappModeSchema = z.union([dappModeEnabledSchema, dappModeDisabledSchema]).optional();
@@ -84,13 +81,10 @@ export const useConfigPollInterval: () => number = () => {
   return config.pollInterval ?? PollingStrategy.FIXED;
 };
 
-const DEFAULT_DSO_GOVERNANCE_PACKAGE_NAME = 'splice-dso-governance';
-
 /** Normalized dApp-mode settings; defined only when the mode is enabled and usable. */
 export interface DappModeConfig {
   scanUrl: string;
   cip103RpcUrl: string;
-  dsoGovernancePackageName: string;
 }
 
 /** Normalized view of an enabled, already-validated dappMode block. */
@@ -102,8 +96,6 @@ export const getDappModeConfig = (config: SvConfig): DappModeConfig | undefined 
   return {
     scanUrl: dappMode.scanUrl.trim(),
     cip103RpcUrl: dappMode.cip103RpcUrl.trim(),
-    dsoGovernancePackageName:
-      dappMode.dsoGovernancePackageName?.trim() || DEFAULT_DSO_GOVERNANCE_PACKAGE_NAME,
   };
 };
 
