@@ -5,14 +5,8 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.PartyId
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_GrantFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_CastVote
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.votedelegation.VoteDelegation
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
-  ActionRequiringConfirmation,
-  DsoRules_CastVote,
-  DsoRules_GrantFeaturedAppRight,
-}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
@@ -22,10 +16,9 @@ import org.lfdecentralizedtrust.splice.integration.InitialPackageVersions
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.CloseVoteRequestTrigger
 import org.lfdecentralizedtrust.splice.util.*
-import org.openqa.selenium.{JavascriptExecutor, WebDriver}
+import org.openqa.selenium.{By, JavascriptExecutor, WebDriver}
 import org.slf4j.event.Level
 
-import java.util.Optional
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -33,8 +26,9 @@ import scala.jdk.OptionConverters.*
 /** CIP-103 UI + reference wallet gateway coverage for SV dApp mode:
   * gateway allocates a voter party on alice's participant; SV creates
   * VoteDelegation; browser connects via the configured RemoteAdapter, discovers
-  * the delegation from ACS, casts a vote through prepareExecuteAndWait, and
-  * approves the gateway popup. On-ledger attribution remains the delegating SV.
+  * the delegation from ACS, creates a request and casts a vote through
+  * prepareExecuteAndWait, and approves the gateway popups. On-ledger
+  * attribution remains the delegating SV.
   */
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_29
 class SvDappModeFrontendIntegrationTest
@@ -59,16 +53,6 @@ class SvDappModeFrontendIntegrationTest
       )
 
   private def testId(id: String) = cssSelector(s"[data-testid='$id']")
-
-  private def grantFeaturedAppAction(provider: PartyId): ActionRequiringConfirmation =
-    new ARC_DsoRules(
-      new SRARC_GrantFeaturedAppRight(
-        new DsoRules_GrantFeaturedAppRight(
-          provider.toProtoPrimitive,
-          Optional.empty(),
-        )
-      )
-    )
 
   private def createVoteDelegation(
       svParty: PartyId,
@@ -334,153 +318,203 @@ class SvDappModeFrontendIntegrationTest
     switchToWindow(mainWindow)
   }
 
+  private def fillOutTextField(elementId: String, text: String, chunkSize: Int = 16)(implicit
+      webDriver: WebDriver
+  ): Unit =
+    eventually() {
+      inside(find(id(elementId))) { case Some(element) =>
+        text.grouped(chunkSize).foreach { chunk =>
+          element.underlying.sendKeys(chunk)
+        }
+      }
+    }
+
+  private def createGrantFeaturedAppRequest(provider: PartyId)(implicit
+      webDriver: WebDriver
+  ): Unit = {
+    go to s"http://localhost:$svDappUIPort/governance"
+    eventually(timeUntilSuccess = 30.seconds) {
+      find(id("initiate-proposal-button")) should not be empty
+    }
+    click on id("initiate-proposal-button")
+    eventually() {
+      webDriver.findElement(By.id("select-action")).click()
+    }
+    eventually() {
+      webDriver
+        .findElement(By.cssSelector("[data-testid='SRARC_GrantFeaturedAppRight']"))
+        .click()
+    }
+    eventually() {
+      click on id("next-button")
+    }
+    eventually() {
+      find(id("grant-featured-app-summary")) should not be empty
+    }
+    eventually() {
+      webDriver.findElement(By.id("effective-at-threshold-radio")).click()
+    }
+    fillOutTextField("grant-featured-app-idValue", provider.toProtoPrimitive)
+    fillOutTextField("grant-featured-app-summary", "dapp-mode create request")
+    fillOutTextField("grant-featured-app-url", "https://example.com/dapp-proposal")
+    eventually() {
+      webDriver.findElement(By.id("submit-button")).isEnabled shouldBe true
+    }
+    click on id("submit-button")
+    eventually() {
+      webDriver.findElement(By.id("submit-button")).getText shouldBe "Submit Proposal"
+    }
+    click on id("submit-button")
+    approveGatewayTransaction()
+  }
+
   "SV dApp-mode UI" should {
-    "connect wallet, discover VoteDelegation, and cast a vote attributed to the SV" in {
-      implicit env =>
-        clue("upload dso-governance DAR on alice's participant") {
-          aliceValidatorBackend.participantClient.upload_dar_unless_exists(dsoGovernanceDarPath)
+    "connect wallet, create a request, and cast a vote attributed to the SV" in { implicit env =>
+      clue("upload dso-governance DAR on alice's participant") {
+        aliceValidatorBackend.participantClient.upload_dar_unless_exists(dsoGovernanceDarPath)
+      }
+
+      val dsoInfo = sv1Backend.getDsoInfo()
+      val sv1Party = dsoInfo.svParty
+      val dsoParty = dsoInfo.dsoParty
+      val provider = sv2Backend.getDsoInfo().svParty
+
+      try {
+        // Gateway self_signed tokens use sub=alice_wallet_user. Canton rejects
+        // JWTs for unknown users (UserNotFound → 403), which surfaces as
+        // addSession "Failed to add session" / "Client version missing".
+        // The wallet-app-client config names this user but does not create it.
+        clue("ensure gateway auth ledger user exists on alice") {
+          val users = aliceValidatorBackend.participantClientWithAdminToken.ledger_api.users
+          if (!users.list().users.exists(_.id == walletGatewayAuthClientId)) {
+            users.create(
+              id = walletGatewayAuthClientId,
+              actAs = Set.empty,
+              primaryParty = None,
+              readAs = Set.empty,
+              participantAdmin = true,
+            )
+          }
         }
 
-        val dsoInfo = sv1Backend.getDsoInfo()
-        val sv1Party = dsoInfo.svParty
-        val dsoParty = dsoInfo.dsoParty
-        val dsoRules = dsoInfo.dsoRules
+        val voterParty = clue("start wallet gateway and allocate participant-signed voter") {
+          // Pin global-domain: alice's connectedSynchronizers[0] is splitwell.
+          startWalletGateway(decentralizedSynchronizerId.toProtoPrimitive)
+          createParticipantWallet(partyHint = s"dapp-voter-${System.currentTimeMillis()}")
+        }
 
-        try {
-          // Gateway self_signed tokens use sub=alice_wallet_user. Canton rejects
-          // JWTs for unknown users (UserNotFound → 403), which surfaces as
-          // addSession "Failed to add session" / "Client version missing".
-          // The wallet-app-client config names this user but does not create it.
-          clue("ensure gateway auth ledger user exists on alice") {
-            val users = aliceValidatorBackend.participantClientWithAdminToken.ledger_api.users
-            if (!users.list().users.exists(_.id == walletGatewayAuthClientId)) {
-              users.create(
-                id = walletGatewayAuthClientId,
-                actAs = Set.empty,
-                primaryParty = None,
-                readAs = Set.empty,
-                participantAdmin = true,
+        clue("SV creates VoteDelegation for the gateway-allocated voter") {
+          createVoteDelegation(sv1Party, dsoParty, voterParty)
+        }
+
+        // Lit / dapp-sdk console warnings are expected once the SDK chunk loads.
+        loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          {
+            withFrontEnd("sv-dapp") { implicit webDriver =>
+              actAndCheck(
+                "open dApp-mode SV UI", {
+                  go to s"http://localhost:$svDappUIPort"
+                },
+              )(
+                "connect-wallet screen is shown (not OIDC login)",
+                _ => {
+                  find(testId("connect-wallet-button")) should not be empty
+                  find(id("user-id-field")) shouldBe empty
+                },
+              )
+
+              actAndCheck(
+                "connect CIP-103 wallet through the gateway", {
+                  connectWalletThroughGateway()
+                },
+              )(
+                "governance nav is available after ACS discovery",
+                _ => {
+                  find(testId("navlink-governance")) should not be empty
+                  find(testId("wallet-login-error")) shouldBe empty
+                },
+              )
+
+              actAndCheck(
+                "create a vote request through the dapp", {
+                  createGrantFeaturedAppRequest(provider)
+                },
+              )(
+                "request is on ledger as the delegating SV",
+                _ => {
+                  find(id("initiate-proposal-button")) should not be empty
+                  val created = sv1Backend.listVoteRequests().loneElement
+                  created.payload.reason.body shouldBe "dapp-mode create request"
+                  created.payload.votes.asScala.values
+                    .map(_.sv) should contain(sv1Party.toProtoPrimitive)
+                  created.payload.votes.asScala.values
+                    .map(_.sv) should not contain voterParty.toProtoPrimitive
+                },
+              )
+
+              val proposalCid = sv1Backend.listVoteRequests().loneElement.contractId.contractId
+
+              actAndCheck(
+                "open proposal and cast accept via wallet gateway", {
+                  go to s"http://localhost:$svDappUIPort/governance/proposals/$proposalCid"
+                  eventually(timeUntilSuccess = 30.seconds) {
+                    find(testId("your-vote-accept")) should not be empty
+                  }
+                  inside(find(testId("your-vote-reason-input"))) { case Some(element) =>
+                    element.underlying.sendKeys("dapp-mode delegated cast")
+                  }
+                  inside(find(testId("your-vote-url-input"))) { case Some(element) =>
+                    element.underlying.sendKeys("https://example.com/dapp-vote")
+                  }
+                  click on testId("your-vote-accept")
+                  approveGatewayTransaction()
+                },
+              )(
+                "vote submission succeeds in the UI",
+                _ =>
+                  inside(find(testId("vote-submission-success"))) { case Some(element) =>
+                    element.text should include("Vote successfully")
+                  },
               )
             }
+          },
+          _ => succeed,
+        )
+
+        clue("on-ledger ballot is attributed to the delegating SV") {
+          eventually() {
+            val updated = sv1Backend
+              .listVoteRequests()
+              .find(_.payload.reason.body == "dapp-mode create request")
+              .value
+            val votes = updated.payload.votes.asScala.values.toSeq
+            votes.map(_.sv) should contain(sv1Party.toProtoPrimitive)
+            votes.map(_.sv) should not contain voterParty.toProtoPrimitive
+            votes
+              .find(_.sv == sv1Party.toProtoPrimitive)
+              .value
+              .accept shouldBe true
           }
-
-          val voterParty = clue("start wallet gateway and allocate participant-signed voter") {
-            // Pin global-domain: alice's connectedSynchronizers[0] is splitwell.
-            startWalletGateway(decentralizedSynchronizerId.toProtoPrimitive)
-            createParticipantWallet(partyHint = s"dapp-voter-${System.currentTimeMillis()}")
-          }
-
-          clue("SV creates VoteDelegation for the gateway-allocated voter") {
-            createVoteDelegation(sv1Party, dsoParty, voterParty)
-          }
-
-          val (_, voteRequest) = actAndCheck(
-            "sv2 opens a vote request",
-            sv2Backend.createVoteRequest(
-              sv2Backend.getDsoInfo().svParty.toProtoPrimitive,
-              grantFeaturedAppAction(voterParty),
-              "url",
-              "open request for dapp-mode cast",
-              dsoRules.payload.config.voteRequestTimeout,
-              None,
-            ),
-          )(
-            "vote request is visible",
-            _ => sv1Backend.listVoteRequests().loneElement,
-          )
-          val trackingCid = getTrackingId(voteRequest)
-          val proposalCid = voteRequest.contractId.contractId
-
-          // Lit / dapp-sdk console warnings are expected once the SDK chunk loads.
-          loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
-            {
-              withFrontEnd("sv-dapp") { implicit webDriver =>
-                actAndCheck(
-                  "open dApp-mode SV UI", {
-                    go to s"http://localhost:$svDappUIPort"
-                  },
-                )(
-                  "connect-wallet screen is shown (not OIDC login)",
-                  _ => {
-                    find(testId("connect-wallet-button")) should not be empty
-                    find(id("user-id-field")) shouldBe empty
-                  },
-                )
-
-                actAndCheck(
-                  "connect CIP-103 wallet through the gateway", {
-                    connectWalletThroughGateway()
-                  },
-                )(
-                  "governance nav is available after ACS discovery",
-                  _ => {
-                    find(testId("navlink-governance")) should not be empty
-                    find(testId("wallet-login-error")) shouldBe empty
-                  },
-                )
-
-                actAndCheck(
-                  "open proposal and cast accept via wallet gateway", {
-                    go to s"http://localhost:$svDappUIPort/governance/proposals/$proposalCid"
-                    eventually(timeUntilSuccess = 30.seconds) {
-                      find(testId("your-vote-accept")) should not be empty
-                    }
-                    inside(find(testId("your-vote-reason-input"))) { case Some(element) =>
-                      element.underlying.sendKeys("dapp-mode delegated cast")
-                    }
-                    inside(find(testId("your-vote-url-input"))) { case Some(element) =>
-                      element.underlying.sendKeys("https://example.com/dapp-vote")
-                    }
-                    click on testId("your-vote-accept")
-                    approveGatewayTransaction()
-                  },
-                )(
-                  "vote submission succeeds in the UI",
-                  _ =>
-                    inside(find(testId("vote-submission-success"))) { case Some(element) =>
-                      element.text should include("Vote successfully")
-                    },
-                )
-              }
-            },
-            _ => succeed,
-          )
-
-          clue("on-ledger ballot is attributed to the delegating SV") {
-            eventually() {
-              val updated = sv1Backend
-                .listVoteRequests()
-                .find(vr => getTrackingId(vr) == trackingCid)
-                .value
-              val votes = updated.payload.votes.asScala.values.toSeq
-              votes.map(_.sv) should contain(sv1Party.toProtoPrimitive)
-              votes.map(_.sv) should not contain voterParty.toProtoPrimitive
-              votes
-                .find(_.sv == sv1Party.toProtoPrimitive)
-                .value
-                .accept shouldBe true
-            }
-          }
-
-          clue("scan history shows the delegate on DsoRules_CastVote") {
-            eventually() {
-              val voterParties = sv1ScanBackend
-                .getUpdateHistory(1000, None, CompactJson)
-                .flatMap {
-                  case UpdateHistoryItemV2.members.UpdateHistoryTransactionV2(tx) =>
-                    tx.eventsById.values.collect {
-                      case TreeEvent.members.ExercisedEvent(ev)
-                          if ev.choice == "DsoRules_CastVote" =>
-                        DsoRules_CastVote.fromJson(ev.choiceArgument.noSpaces).voterParty.toScala
-                    }.flatten
-                  case _ => Seq.empty
-                }
-              voterParties should contain(voterParty.toProtoPrimitive)
-            }
-          }
-        } finally {
-          stopWalletGateway()
         }
+
+        clue("scan history shows the delegate on DsoRules_CastVote") {
+          eventually() {
+            val voterParties = sv1ScanBackend
+              .getUpdateHistory(1000, None, CompactJson)
+              .flatMap {
+                case UpdateHistoryItemV2.members.UpdateHistoryTransactionV2(tx) =>
+                  tx.eventsById.values.collect {
+                    case TreeEvent.members.ExercisedEvent(ev) if ev.choice == "DsoRules_CastVote" =>
+                      DsoRules_CastVote.fromJson(ev.choiceArgument.noSpaces).voterParty.toScala
+                  }.flatten
+                case _ => Seq.empty
+              }
+            voterParties should contain(voterParty.toProtoPrimitive)
+          }
+        }
+      } finally {
+        stopWalletGateway()
+      }
     }
   }
 }
