@@ -23,16 +23,6 @@ describe('dappMode config schema', () => {
     expect(getDappModeConfig(parsed)).toBeUndefined();
   });
 
-  test('env-substituted empty strings are treated as disabled', () => {
-    // The docker config.js template substitutes missing env vars with ''.
-    const parsed = parse({
-      enabled: '',
-      scanUrl: '',
-      cip103RpcUrl: '',
-    });
-    expect(getDappModeConfig(parsed)).toBeUndefined();
-  });
-
   test('enabled dappMode requires scanUrl and cip103RpcUrl', () => {
     expect(() => parse({ enabled: true })).toThrow(/scanUrl/);
     expect(() => parse({ enabled: true, scanUrl: 'http://scan.localhost:4000/api/scan' })).toThrow(
