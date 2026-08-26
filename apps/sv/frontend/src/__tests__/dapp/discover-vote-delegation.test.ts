@@ -54,7 +54,6 @@ describe('discoverVoteDelegation', () => {
       discoverVoteDelegation({
         sdkClient: client,
         voterPartyId: dappVoterPartyId,
-        packageName: PACKAGE_NAME,
       })
     ).resolves.toEqual({
       voteDelegationCid: dappVoteDelegationCid,
@@ -69,7 +68,6 @@ describe('discoverVoteDelegation', () => {
       discoverVoteDelegation({
         sdkClient: client,
         voterPartyId: dappVoterPartyId,
-        packageName: PACKAGE_NAME,
       })
     ).rejects.toMatchObject({
       name: 'VoteDelegationDiscoveryError',
@@ -95,7 +93,6 @@ describe('discoverVoteDelegation', () => {
       discoverVoteDelegation({
         sdkClient: client,
         voterPartyId: dappVoterPartyId,
-        packageName: PACKAGE_NAME,
       })
     ).rejects.toMatchObject({
       name: 'VoteDelegationDiscoveryError',
@@ -116,7 +113,6 @@ describe('discoverVoteDelegation', () => {
       discoverVoteDelegation({
         sdkClient: client,
         voterPartyId: dappVoterPartyId,
-        packageName: PACKAGE_NAME,
       })
     ).rejects.toMatchObject({ code: 'none' });
   });

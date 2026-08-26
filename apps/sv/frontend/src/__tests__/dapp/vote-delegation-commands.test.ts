@@ -8,8 +8,6 @@ import {
   getVoteDelegationTemplateId,
 } from '../../dapp/voteDelegationCommands';
 
-const PACKAGE_NAME = 'splice-dso-governance';
-
 const castArgs = {
   voteRequestContractId: '00currentvoterequest',
   accepted: true,
@@ -22,34 +20,28 @@ const castArgs = {
 };
 
 describe('getVoteDelegationTemplateId', () => {
-  test('builds a package-name template id', () => {
-    expect(getVoteDelegationTemplateId(PACKAGE_NAME)).toBe(
+  test('builds the splice-dso-governance template id', () => {
+    expect(getVoteDelegationTemplateId()).toBe(
       '#splice-dso-governance:Splice.DsoRules.VoteDelegation:VoteDelegation'
-    );
-  });
-
-  test('supports package name overrides', () => {
-    expect(getVoteDelegationTemplateId('splice-dso-governance-dev')).toBe(
-      '#splice-dso-governance-dev:Splice.DsoRules.VoteDelegation:VoteDelegation'
     );
   });
 });
 
 describe('buildVoteDelegationCastParams', () => {
   test('exercises VoteDelegation_CastVote as the voter party', () => {
-    const params = buildVoteDelegationCastParams(castArgs, PACKAGE_NAME);
+    const params = buildVoteDelegationCastParams(castArgs);
 
     expect(params.actAs).toEqual(['voter::1220bb']);
     expect(params.commands).toHaveLength(1);
     const exercise = (params.commands[0] as { ExerciseCommand: Record<string, unknown> })
       .ExerciseCommand;
-    expect(exercise.templateId).toBe(getVoteDelegationTemplateId(PACKAGE_NAME));
+    expect(exercise.templateId).toBe(getVoteDelegationTemplateId());
     expect(exercise.contractId).toBe('00votedelegation');
     expect(exercise.choice).toBe('VoteDelegation_CastVote');
   });
 
   test('relays DsoRules_CastVote with the delegating SV vote and the voter party', () => {
-    const params = buildVoteDelegationCastParams(castArgs, PACKAGE_NAME);
+    const params = buildVoteDelegationCastParams(castArgs);
     const exercise = (params.commands[0] as { ExerciseCommand: Record<string, unknown> })
       .ExerciseCommand;
     expect(exercise.choiceArgument).toEqual({
@@ -71,16 +63,13 @@ describe('buildVoteDelegationCastParams', () => {
   });
 
   test('maps disclosed contracts into SDK shape', () => {
-    const params = buildVoteDelegationCastParams(
-      {
-        ...castArgs,
-        disclosedContracts: [
-          { contractId: '00dsorules', createdEventBlob: 'blob-a', templateId: 'pkg:M:DsoRules' },
-          { contractId: '00currentvoterequest', createdEventBlob: 'blob-b' },
-        ],
-      },
-      PACKAGE_NAME
-    );
+    const params = buildVoteDelegationCastParams({
+      ...castArgs,
+      disclosedContracts: [
+        { contractId: '00dsorules', createdEventBlob: 'blob-a', templateId: 'pkg:M:DsoRules' },
+        { contractId: '00currentvoterequest', createdEventBlob: 'blob-b' },
+      ],
+    });
 
     expect(params.disclosedContracts).toEqual([
       { contractId: '00dsorules', createdEventBlob: 'blob-a', templateId: 'pkg:M:DsoRules' },
@@ -89,7 +78,7 @@ describe('buildVoteDelegationCastParams', () => {
   });
 
   test('omits disclosed contracts when none provided', () => {
-    const params = buildVoteDelegationCastParams(castArgs, PACKAGE_NAME);
+    const params = buildVoteDelegationCastParams(castArgs);
     expect(params.disclosedContracts).toBeUndefined();
   });
 });
@@ -107,7 +96,7 @@ describe('buildVoteDelegationRequestParams', () => {
   };
 
   test('relays DsoRules_RequestVote with the delegating SV as requester', () => {
-    const params = buildVoteDelegationRequestParams(requestArgs, PACKAGE_NAME);
+    const params = buildVoteDelegationRequestParams(requestArgs);
 
     expect(params.actAs).toEqual(['voter::1220bb']);
     const exercise = (params.commands[0] as { ExerciseCommand: Record<string, unknown> })
@@ -127,10 +116,10 @@ describe('buildVoteDelegationRequestParams', () => {
   });
 
   test('passes an explicit effective time through', () => {
-    const params = buildVoteDelegationRequestParams(
-      { ...requestArgs, targetEffectiveAt: '2026-08-01T00:00:00.000Z' },
-      PACKAGE_NAME
-    );
+    const params = buildVoteDelegationRequestParams({
+      ...requestArgs,
+      targetEffectiveAt: '2026-08-01T00:00:00.000Z',
+    });
     const exercise = (params.commands[0] as { ExerciseCommand: Record<string, unknown> })
       .ExerciseCommand;
     expect(

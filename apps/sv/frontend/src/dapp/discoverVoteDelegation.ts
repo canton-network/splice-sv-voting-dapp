@@ -80,10 +80,9 @@ const extractCreatedEvents = (result: unknown): CreatedEventLike[] => {
 export async function discoverVoteDelegation(args: {
   sdkClient: DappSdkClient;
   voterPartyId: string;
-  packageName: string;
 }): Promise<DiscoveredVoteDelegation> {
-  const { sdkClient, voterPartyId, packageName } = args;
-  const templateId = getVoteDelegationTemplateId(packageName);
+  const { sdkClient, voterPartyId } = args;
+  const templateId = getVoteDelegationTemplateId();
 
   let ledgerEnd: unknown;
   try {

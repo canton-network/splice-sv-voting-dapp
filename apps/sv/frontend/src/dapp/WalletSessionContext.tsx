@@ -49,7 +49,6 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
     throw new Error('WalletSessionProvider requires dappMode to be enabled in the app config');
   }
   const cip103RpcUrl = dappMode.cip103RpcUrl;
-  const packageName = dappMode.dsoGovernancePackageName;
   const client = useMemo(() => getDappSdkClient(cip103RpcUrl), [cip103RpcUrl]);
 
   const [status, setStatus] = useState<WalletConnectionStatus>('initializing');
@@ -78,7 +77,6 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
         const discovered = await discoverVoteDelegation({
           sdkClient: client,
           voterPartyId: partyId,
-          packageName,
         });
         if (generation !== discoveryGenerationRef.current) {
           return;
@@ -99,7 +97,7 @@ export const WalletSessionProvider: React.FC<React.PropsWithChildren> = ({ child
         }
       }
     },
-    [client, packageName]
+    [client]
   );
 
   const applyAccounts = useCallback(

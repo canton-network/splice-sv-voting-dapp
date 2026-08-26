@@ -13,16 +13,8 @@ import {
   SignatureRejectedError,
   VoteDelegationContextError,
 } from '../../dapp/voteDelegationSubmission';
-import { DappModeConfig } from '../../utils/config';
-
 const VOTER_PARTY = 'voter::1220bb';
 const SV_PARTY = 'Delegating-SV::1220aa';
-
-const dappMode: DappModeConfig = {
-  scanUrl: 'http://scan.localhost:4000/api/scan',
-  cip103RpcUrl: 'http://localhost:3030/api/v0/dapp',
-  dsoGovernancePackageName: 'splice-dso-governance',
-};
 
 const DELEGATION_CID = '00votedelegation';
 
@@ -89,7 +81,6 @@ const buildSubmission = (
   createVoteDelegationSubmission({
     scanClient: fakes.scanClient,
     sdkClient: fakes.sdkClient,
-    dappMode,
     getVoterPartyId: () => ('voterPartyId' in args ? args.voterPartyId : VOTER_PARTY),
     getSvPartyId: () => ('svPartyId' in args ? args.svPartyId : SV_PARTY),
     getVoteDelegationCid: () =>

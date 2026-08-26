@@ -5,7 +5,6 @@ import * as scanOpenapi from '@canton-network/scan-openapi';
 import { RelTime } from '@daml.js/daml-stdlib-DA-Time-Types-1.0.0/lib/DA/Time/Types/module';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
 
-import { DappModeConfig } from '../utils/config';
 import { DappSdkClient } from './dappSdkClient';
 import {
   buildVoteDelegationCastParams,
@@ -103,7 +102,6 @@ interface VoteDelegationContext {
 export interface VoteDelegationSubmissionDeps {
   scanClient: scanOpenapi.ScanApi;
   sdkClient: DappSdkClient;
-  dappMode: DappModeConfig;
   getVoterPartyId: () => string | undefined;
   /** Delegating SV party from ACS-discovered VoteDelegation. */
   getSvPartyId: () => string | undefined;
@@ -135,8 +133,7 @@ export interface VoteDelegationSubmission {
 export function createVoteDelegationSubmission(
   deps: VoteDelegationSubmissionDeps
 ): VoteDelegationSubmission {
-  const { scanClient, sdkClient, dappMode, getVoterPartyId, getSvPartyId, getVoteDelegationCid } =
-    deps;
+  const { scanClient, sdkClient, getVoterPartyId, getSvPartyId, getVoteDelegationCid } = deps;
 
   const resolveContext = async (operation: string): Promise<VoteDelegationContext> => {
     const voterPartyId = getVoterPartyId();
@@ -238,20 +235,17 @@ export function createVoteDelegationSubmission(
         ...(voteRequest.disclosed !== undefined ? [voteRequest.disclosed] : []),
       ];
 
-      const params = buildVoteDelegationCastParams(
-        {
-          voteRequestContractId: voteRequest.contractId,
-          accepted: isAccepted,
-          reasonUrl,
-          reasonDescription,
-          voteDelegationCid: context.voteDelegationCid,
-          dsoRulesCid: context.dsoRulesCid,
-          svPartyId: context.svPartyId,
-          voterPartyId: context.voterPartyId,
-          ...(disclosedContracts.length > 0 ? { disclosedContracts } : {}),
-        },
-        dappMode.dsoGovernancePackageName
-      );
+      const params = buildVoteDelegationCastParams({
+        voteRequestContractId: voteRequest.contractId,
+        accepted: isAccepted,
+        reasonUrl,
+        reasonDescription,
+        voteDelegationCid: context.voteDelegationCid,
+        dsoRulesCid: context.dsoRulesCid,
+        svPartyId: context.svPartyId,
+        voterPartyId: context.voterPartyId,
+        ...(disclosedContracts.length > 0 ? { disclosedContracts } : {}),
+      });
 
       try {
         await sdkClient.prepareExecuteAndWait(params);
@@ -270,23 +264,20 @@ export function createVoteDelegationSubmission(
       const context = await resolveContext('proposal');
 
       const encodedExpiration = RelTime.encode(expiration) as { microseconds: string };
-      const params = buildVoteDelegationRequestParams(
-        {
-          action: ActionRequiringConfirmation.encode(action),
-          reasonUrl: url,
-          reasonDescription: description,
-          voteRequestTimeoutMicroseconds: encodedExpiration.microseconds,
-          targetEffectiveAt: effectiveTime?.toISOString(),
-          voteDelegationCid: context.voteDelegationCid,
-          dsoRulesCid: context.dsoRulesCid,
-          svPartyId: context.svPartyId,
-          voterPartyId: context.voterPartyId,
-          ...(context.dsoRulesDisclosed !== undefined
-            ? { disclosedContracts: [context.dsoRulesDisclosed] }
-            : {}),
-        },
-        dappMode.dsoGovernancePackageName
-      );
+      const params = buildVoteDelegationRequestParams({
+        action: ActionRequiringConfirmation.encode(action),
+        reasonUrl: url,
+        reasonDescription: description,
+        voteRequestTimeoutMicroseconds: encodedExpiration.microseconds,
+        targetEffectiveAt: effectiveTime?.toISOString(),
+        voteDelegationCid: context.voteDelegationCid,
+        dsoRulesCid: context.dsoRulesCid,
+        svPartyId: context.svPartyId,
+        voterPartyId: context.voterPartyId,
+        ...(context.dsoRulesDisclosed !== undefined
+          ? { disclosedContracts: [context.dsoRulesDisclosed] }
+          : {}),
+      });
 
       try {
         await sdkClient.prepareExecuteAndWait(params);

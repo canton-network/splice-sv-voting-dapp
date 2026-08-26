@@ -37,7 +37,6 @@ export const DappSvAdminClientProvider: React.FC<React.PropsWithChildren> = ({ c
     const submission = createVoteDelegationSubmission({
       scanClient,
       sdkClient: getDappSdkClient(cip103RpcUrl),
-      dappMode: dappModeConfig,
       getVoterPartyId: () => voterPartyId,
       getSvPartyId: () => svPartyId,
       getVoteDelegationCid: () => voteDelegationCid,

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { PrepareExecuteParams } from '@canton-network/dapp-sdk';
 
+const DSO_GOVERNANCE_PACKAGE_NAME = 'splice-dso-governance';
 const VOTE_DELEGATION_MODULE = 'Splice.DsoRules.VoteDelegation';
 const VOTE_DELEGATION_ENTITY = 'VoteDelegation';
 const CAST_VOTE_CHOICE = 'VoteDelegation_CastVote';
@@ -44,8 +45,8 @@ export interface RequestVoteCommandArgs {
   readonly disclosedContracts?: readonly DisclosedContractInput[];
 }
 
-export function getVoteDelegationTemplateId(packageName: string): string {
-  return `#${packageName}:${VOTE_DELEGATION_MODULE}:${VOTE_DELEGATION_ENTITY}`;
+export function getVoteDelegationTemplateId(): string {
+  return `#${DSO_GOVERNANCE_PACKAGE_NAME}:${VOTE_DELEGATION_MODULE}:${VOTE_DELEGATION_ENTITY}`;
 }
 
 function toSdkDisclosedContracts(
@@ -66,17 +67,14 @@ function toSdkDisclosedContracts(
  * `DsoRules_CastVote` with `vote.sv` = delegating SV and `voterParty` set so
  * the delegated cast is co-authorized and recorded on-ledger.
  */
-export function buildVoteDelegationCastParams(
-  args: CastVoteCommandArgs,
-  packageName: string
-): PrepareExecuteParams {
+export function buildVoteDelegationCastParams(args: CastVoteCommandArgs): PrepareExecuteParams {
   const disclosedContracts = toSdkDisclosedContracts(args.disclosedContracts);
 
   return {
     commands: [
       {
         ExerciseCommand: {
-          templateId: getVoteDelegationTemplateId(packageName),
+          templateId: getVoteDelegationTemplateId(),
           contractId: args.voteDelegationCid,
           choice: CAST_VOTE_CHOICE,
           choiceArgument: {
@@ -108,8 +106,7 @@ export function buildVoteDelegationCastParams(
  * relaying `DsoRules_RequestVote` with `requester` = delegating SV.
  */
 export function buildVoteDelegationRequestParams(
-  args: RequestVoteCommandArgs,
-  packageName: string
+  args: RequestVoteCommandArgs
 ): PrepareExecuteParams {
   const disclosedContracts = toSdkDisclosedContracts(args.disclosedContracts);
 
@@ -117,7 +114,7 @@ export function buildVoteDelegationRequestParams(
     commands: [
       {
         ExerciseCommand: {
-          templateId: getVoteDelegationTemplateId(packageName),
+          templateId: getVoteDelegationTemplateId(),
           contractId: args.voteDelegationCid,
           choice: REQUEST_VOTE_CHOICE,
           choiceArgument: {
