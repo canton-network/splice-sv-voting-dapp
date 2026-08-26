@@ -21,12 +21,18 @@ type SvServicesConfig = {
 // RPC endpoint, governance reads come from Scan, and vote submissions are
 // exercised on a VoteDelegation contract through the dApp API.
 // Docker envsubst emits "true"/"false" strings; accept those plus booleans.
+const alreadyTrimmed = (value: string): boolean => value === value.trim();
+
 const dappModeEnabledSchema = z.object({
   enabled: z.union([z.literal(true), z.literal('true')]).transform(() => true as const),
   // Scan API base URL, e.g. http://scan.localhost:4000/api/scan
-  scanUrl: z.string().min(1),
+  scanUrl: z.string().min(1).refine(alreadyTrimmed, {
+    message: 'must not have leading or trailing whitespace',
+  }),
   // CIP-103 dApp RPC URL (wallet gateway or partner wallet), e.g. http://localhost:3030/api/v0/dapp
-  cip103RpcUrl: z.string().min(1),
+  cip103RpcUrl: z.string().min(1).refine(alreadyTrimmed, {
+    message: 'must not have leading or trailing whitespace',
+  }),
 });
 
 const dappModeDisabledSchema = z.object({
@@ -94,8 +100,8 @@ export const getDappModeConfig = (config: SvConfig): DappModeConfig | undefined 
     return undefined;
   }
   return {
-    scanUrl: dappMode.scanUrl.trim(),
-    cip103RpcUrl: dappMode.cip103RpcUrl.trim(),
+    scanUrl: dappMode.scanUrl,
+    cip103RpcUrl: dappMode.cip103RpcUrl,
   };
 };
 
