@@ -455,10 +455,17 @@ class SvDappModeFrontendIntegrationTest
               val proposalCid = sv1Backend.listVoteRequests().loneElement.contractId.contractId
 
               actAndCheck(
-                "open proposal and cast accept via wallet gateway", {
+                "open proposal and update the create-time vote via wallet gateway", {
                   go to s"http://localhost:$svDappUIPort/governance/proposals/$proposalCid"
                   eventually(timeUntilSuccess = 30.seconds) {
-                    find(testId("your-vote-accept")) should not be empty
+                    (find(testId("your-vote-accept")).nonEmpty ||
+                      find(testId("your-vote-edit-button")).nonEmpty) shouldBe true
+                  }
+                  if (find(testId("your-vote-accept")).isEmpty) {
+                    click on testId("your-vote-edit-button")
+                    eventually() {
+                      find(testId("your-vote-accept")) should not be empty
+                    }
                   }
                   inside(find(testId("your-vote-reason-input"))) { case Some(element) =>
                     element.underlying.sendKeys("dapp-mode delegated cast")
