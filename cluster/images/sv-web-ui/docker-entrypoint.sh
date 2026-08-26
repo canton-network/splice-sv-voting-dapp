@@ -9,6 +9,9 @@ http=${SPLICE_APP_UI_HTTP_URL:-false}
 
 echo "Generating config.js file..."
 
+# envsubst leaves unset vars empty; default so config.js gets "false", not "".
+export SPLICE_APP_UI_DAPP_MODE_ENABLED="${SPLICE_APP_UI_DAPP_MODE_ENABLED:-false}"
+
 if [ "$http" == "true" ] || [ "$http" == "1" ]; then
   echo "WARNING: Using an http url"
   sed -i 's/url: "https:\/\/"/url: "http:\/\/"/' /tmpl/config.js.tmpl
