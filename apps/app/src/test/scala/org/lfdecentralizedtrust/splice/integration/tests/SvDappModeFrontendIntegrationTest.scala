@@ -10,10 +10,13 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_act
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.votedelegation.VoteDelegation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   ActionRequiringConfirmation,
+  DsoRules_CastVote,
   DsoRules_GrantFeaturedAppRight,
 }
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.environment.DarResources
+import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{TreeEvent, UpdateHistoryItemV2}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.InitialPackageVersions
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
@@ -25,6 +28,7 @@ import org.slf4j.event.Level
 import java.util.Optional
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 
 /** CIP-103 UI + reference wallet gateway coverage for SV dApp mode:
   * gateway allocates a voter party on alice's participant; SV creates
@@ -456,6 +460,23 @@ class SvDappModeFrontendIntegrationTest
                 .find(_.sv == sv1Party.toProtoPrimitive)
                 .value
                 .accept shouldBe true
+            }
+          }
+
+          clue("scan history shows the delegate on DsoRules_CastVote") {
+            eventually() {
+              val voterParties = sv1ScanBackend
+                .getUpdateHistory(1000, None, CompactJson)
+                .flatMap {
+                  case UpdateHistoryItemV2.members.UpdateHistoryTransactionV2(tx) =>
+                    tx.eventsById.values.collect {
+                      case TreeEvent.members.ExercisedEvent(ev)
+                          if ev.choice == "DsoRules_CastVote" =>
+                        DsoRules_CastVote.fromJson(ev.choiceArgument.noSpaces).voterParty.toScala
+                    }.flatten
+                  case _ => Seq.empty
+                }
+              voterParties should contain(voterParty.toProtoPrimitive)
             }
           }
         } finally {
