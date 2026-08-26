@@ -48,14 +48,7 @@ const parseLedgerEndOffset = (result: unknown): number | undefined => {
     return undefined;
   }
   const offset = (result as { offset?: unknown }).offset;
-  if (typeof offset === 'number' && Number.isFinite(offset)) {
-    return offset;
-  }
-  if (typeof offset === 'string' && offset.trim().length > 0) {
-    const parsed = Number(offset);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
+  return typeof offset === 'number' ? offset : undefined;
 };
 
 const extractCreatedEvents = (result: unknown): CreatedEventLike[] => {
