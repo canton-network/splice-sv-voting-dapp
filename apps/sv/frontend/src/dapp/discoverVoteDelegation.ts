@@ -1,5 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import { VoteDelegation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/VoteDelegation';
+
 import { DappSdkClient } from './dappSdkClient';
 import { getVoteDelegationTemplateId } from './voteDelegationCommands';
 
@@ -23,25 +25,20 @@ export interface DiscoveredVoteDelegation {
 }
 
 interface CreatedEventLike {
-  contractId?: string;
-  templateId?: string;
-  createArgument?: {
-    sv?: unknown;
-    voterParty?: unknown;
-    dso?: unknown;
-  };
+  contractId: string;
+  createArgument: unknown;
 }
 
 interface ActiveContractEntry {
   contractEntry?: {
     JsActiveContract?: {
-      createdEvent?: CreatedEventLike;
+      createdEvent?: {
+        contractId?: unknown;
+        createArgument?: unknown;
+      };
     };
   };
 }
-
-const asString = (value: unknown): string | undefined =>
-  typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 
 const parseLedgerEndOffset = (result: unknown): number | undefined => {
   if (typeof result !== 'object' || result === null) {
@@ -60,9 +57,17 @@ const extractCreatedEvents = (result: unknown): CreatedEventLike[] => {
       ? (result as { contractEntries: ActiveContractEntry[] }).contractEntries
       : [];
 
-  return entries
-    .map(entry => entry.contractEntry?.JsActiveContract?.createdEvent)
-    .filter((event): event is CreatedEventLike => event !== undefined);
+  return entries.flatMap(entry => {
+    const event = entry.contractEntry?.JsActiveContract?.createdEvent;
+    if (
+      event === undefined ||
+      typeof event.contractId !== 'string' ||
+      event.createArgument === undefined
+    ) {
+      return [];
+    }
+    return [{ contractId: event.contractId, createArgument: event.createArgument }];
+  });
 };
 
 /**
@@ -138,20 +143,19 @@ export async function discoverVoteDelegation(args: {
     );
   }
 
-  const matches = extractCreatedEvents(acsResult)
-    .map(event => {
-      const voteDelegationCid = asString(event.contractId);
-      const svPartyId = asString(event.createArgument?.sv);
-      const eventVoter = asString(event.createArgument?.voterParty);
-      if (!voteDelegationCid || !svPartyId || !eventVoter) {
-        return undefined;
-      }
-      if (eventVoter !== voterPartyId) {
-        return undefined;
-      }
-      return { voteDelegationCid, svPartyId, voterPartyId } satisfies DiscoveredVoteDelegation;
-    })
-    .filter((match): match is DiscoveredVoteDelegation => match !== undefined);
+  const matches = extractCreatedEvents(acsResult).flatMap(event => {
+    const payload = VoteDelegation.decoder.runWithException(event.createArgument);
+    if (payload.voterParty !== voterPartyId) {
+      return [];
+    }
+    return [
+      {
+        voteDelegationCid: event.contractId,
+        svPartyId: payload.sv,
+        voterPartyId,
+      } satisfies DiscoveredVoteDelegation,
+    ];
+  });
 
   if (matches.length === 0) {
     throw new VoteDelegationDiscoveryError(
