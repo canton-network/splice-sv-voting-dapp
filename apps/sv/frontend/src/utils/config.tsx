@@ -20,42 +20,28 @@ type SvServicesConfig = {
 // When enabled, the SV app runs backend-less: login goes through a CIP-103
 // RPC endpoint, governance reads come from Scan, and vote submissions are
 // exercised on a VoteDelegation contract through the dApp API.
-// Values may arrive as env-substituted strings (docker config.js template).
-// enabled accepts true/'true' (on) or false/'false'/''/absent (off); other
-// strings are rejected at parse time so typos do not silently disable the mode.
-export const dappModeSchema = z
-  .object({
-    enabled: z
-      .union([z.boolean(), z.enum(['true', 'false', ''])])
-      .optional()
-      .transform(value => value === true || value === 'true'),
-    // Scan API base URL, e.g. http://scan.localhost:4000/api/scan
-    scanUrl: z.string().optional(),
-    // CIP-103 dApp RPC URL (wallet gateway or partner wallet), e.g. http://localhost:3030/api/v0/dapp
-    cip103RpcUrl: z.string().optional(),
-    // Override for the dso-governance Daml package name in template ids.
-    dsoGovernancePackageName: z.string().optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (!value.enabled) {
-      return;
-    }
-    if (!value.scanUrl?.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['scanUrl'],
-        message: 'dappMode.scanUrl is required when dappMode is enabled',
-      });
-    }
-    if (!value.cip103RpcUrl?.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['cip103RpcUrl'],
-        message: 'dappMode.cip103RpcUrl is required when dappMode is enabled',
-      });
-    }
-  })
-  .optional();
+// Docker envsubst emits "true"/"false" strings; accept those plus booleans.
+const dappModeEnabledSchema = z.object({
+  enabled: z.union([z.literal(true), z.literal('true')]).transform(() => true as const),
+  // Scan API base URL, e.g. http://scan.localhost:4000/api/scan
+  scanUrl: z.string().min(1),
+  // CIP-103 dApp RPC URL (wallet gateway or partner wallet), e.g. http://localhost:3030/api/v0/dapp
+  cip103RpcUrl: z.string().min(1),
+  // Override for the dso-governance Daml package name in template ids.
+  dsoGovernancePackageName: z.string().optional(),
+});
+
+const dappModeDisabledSchema = z.object({
+  enabled: z
+    .union([z.literal(false), z.literal('false')])
+    .optional()
+    .transform(() => false as const),
+  scanUrl: z.string().optional(),
+  cip103RpcUrl: z.string().optional(),
+  dsoGovernancePackageName: z.string().optional(),
+});
+
+export const dappModeSchema = z.union([dappModeEnabledSchema, dappModeDisabledSchema]).optional();
 
 type SvConfig = {
   auth: z.infer<typeof authSchema>;
@@ -107,18 +93,15 @@ export interface DappModeConfig {
   dsoGovernancePackageName: string;
 }
 
-/**
- * Pure normalizer over a successfully parsed config. Validity of scanUrl /
- * cip103RpcUrl when enabled is decided solely by dappModeSchema.superRefine.
- */
+/** Normalized view of an enabled, already-validated dappMode block. */
 export const getDappModeConfig = (config: SvConfig): DappModeConfig | undefined => {
   const dappMode = config.dappMode;
   if (!dappMode?.enabled) {
     return undefined;
   }
   return {
-    scanUrl: dappMode.scanUrl!.trim(),
-    cip103RpcUrl: dappMode.cip103RpcUrl!.trim(),
+    scanUrl: dappMode.scanUrl.trim(),
+    cip103RpcUrl: dappMode.cip103RpcUrl.trim(),
     dsoGovernancePackageName:
       dappMode.dsoGovernancePackageName?.trim() || DEFAULT_DSO_GOVERNANCE_PACKAGE_NAME,
   };
