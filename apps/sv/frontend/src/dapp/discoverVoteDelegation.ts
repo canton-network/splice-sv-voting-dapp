@@ -120,6 +120,7 @@ export async function discoverVoteDelegation(args: {
     );
   }
 
+  // TODO(#28): let the voter select which VoteDelegation to use when several match
   if (matches.length > 1) {
     const svList = matches.map(match => match.svPartyId).join(', ');
     throw new VoteDelegationDiscoveryError(
