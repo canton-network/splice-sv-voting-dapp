@@ -100,6 +100,19 @@ describe('discoverVoteDelegation', () => {
     } satisfies Partial<VoteDelegationDiscoveryError>);
   });
 
+  test('errors when an ACS entry has no active created event', async () => {
+    const client = buildClient([{ contractEntry: {} }]);
+    await expect(
+      discoverVoteDelegation({
+        sdkClient: client,
+        voterPartyId: dappVoterPartyId,
+      })
+    ).rejects.toMatchObject({
+      name: 'VoteDelegationDiscoveryError',
+      code: 'ledger',
+    } satisfies Partial<VoteDelegationDiscoveryError>);
+  });
+
   test('ignores contracts for a different voterParty', async () => {
     const client = buildClient([
       acsEntry({

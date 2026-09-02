@@ -94,7 +94,10 @@ export async function discoverVoteDelegation(args: {
   const matches = acsResult.flatMap(response => {
     const createdEvent = response.contractEntry?.JsActiveContract?.createdEvent;
     if (createdEvent === undefined) {
-      return [];
+      throw new VoteDelegationDiscoveryError(
+        'VoteDelegation ACS entry was missing JsActiveContract.createdEvent',
+        'ledger'
+      );
     }
     const payload = VoteDelegation.decoder.runWithException(createdEvent.createArgument);
     if (payload.voterParty !== voterPartyId) {
