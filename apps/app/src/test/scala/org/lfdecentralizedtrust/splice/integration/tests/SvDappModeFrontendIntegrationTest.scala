@@ -5,7 +5,10 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.PartyId
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_CastVote
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules_CastVote,
+  DsoRules_RequestVote,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.votedelegation.VoteDelegation
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.environment.DarResources
@@ -507,19 +510,36 @@ class SvDappModeFrontendIntegrationTest
           }
         }
 
-        clue("scan history shows the delegate on DsoRules_CastVote") {
+        clue("scan history shows the delegate on DsoRules_RequestVote and DsoRules_CastVote") {
           eventually() {
-            val voterParties = sv1ScanBackend
-              .getUpdateHistory(1000, None, CompactJson)
-              .flatMap {
-                case UpdateHistoryItemV2.members.UpdateHistoryTransactionV2(tx) =>
-                  tx.eventsById.values.collect {
-                    case TreeEvent.members.ExercisedEvent(ev) if ev.choice == "DsoRules_CastVote" =>
-                      DsoRules_CastVote.fromJson(ev.choiceArgument.noSpaces).voterParty.toScala
-                  }.flatten
-                case _ => Seq.empty
-              }
-            voterParties should contain(voterParty.toProtoPrimitive)
+            val history = sv1ScanBackend.getUpdateHistory(1000, None, CompactJson)
+            forExactly(1, history) {
+              case UpdateHistoryItemV2.members.UpdateHistoryTransactionV2(tx) =>
+                forExactly(1, tx.eventsById.values) {
+                  case TreeEvent.members.ExercisedEvent(ev)
+                      if ev.choice == "DsoRules_RequestVote" =>
+                    DsoRules_RequestVote
+                      .fromJson(ev.choiceArgument.noSpaces)
+                      .voterParty
+                      .toScala
+                      .value shouldBe voterParty.toProtoPrimitive
+                  case _ => fail()
+                }
+              case _ => fail()
+            }
+            forExactly(1, history) {
+              case UpdateHistoryItemV2.members.UpdateHistoryTransactionV2(tx) =>
+                forExactly(1, tx.eventsById.values) {
+                  case TreeEvent.members.ExercisedEvent(ev) if ev.choice == "DsoRules_CastVote" =>
+                    DsoRules_CastVote
+                      .fromJson(ev.choiceArgument.noSpaces)
+                      .voterParty
+                      .toScala
+                      .value shouldBe voterParty.toProtoPrimitive
+                  case _ => fail()
+                }
+              case _ => fail()
+            }
           }
         }
       } finally {
