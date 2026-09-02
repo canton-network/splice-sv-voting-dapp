@@ -30,28 +30,20 @@ export class SignatureRejectedError extends Error {
   }
 }
 
-// ErrorCode.UserCancelled from @canton-network/dapp-sdk — compare by value so
-// this module never statically imports the SDK (Lit warning in standard mode).
-const DAPP_SDK_USER_CANCELLED = 1;
-
-function isUserCancelled(error: unknown): boolean {
+async function isUserCancelled(error: unknown): Promise<boolean> {
   if (error instanceof SignatureRejectedError) {
     return true;
   }
   if (typeof error === 'object' && error !== null && 'code' in error) {
-    const code = (error as { code: unknown }).code;
-    // Structured CIP-103 / wallet signals only. Do not substring-match message
-    // text: ledger failures often contain "rejected" and must surface as
-    // themselves, not as a wallet cancellation.
-    return (
-      code === DAPP_SDK_USER_CANCELLED || code === 'UserCancelled' || code === 'signature_rejected'
-    );
+    // Dynamic import keeps the SDK out of standard mode.
+    const { ErrorCode } = await import('@canton-network/dapp-sdk');
+    return (error as { code: unknown }).code === ErrorCode.UserCancelled;
   }
   return false;
 }
 
-const mapWalletError = (error: unknown): Error => {
-  if (isUserCancelled(error)) {
+const mapWalletError = async (error: unknown): Promise<Error> => {
+  if (await isUserCancelled(error)) {
     return new SignatureRejectedError(
       error instanceof Error ? error.message : 'Signature rejected or cancelled in the wallet'
     );
@@ -250,7 +242,7 @@ export function createVoteDelegationSubmission(
       try {
         await sdkClient.prepareExecuteAndWait(params);
       } catch (error) {
-        throw mapWalletError(error);
+        throw await mapWalletError(error);
       }
     },
 
@@ -282,7 +274,7 @@ export function createVoteDelegationSubmission(
       try {
         await sdkClient.prepareExecuteAndWait(params);
       } catch (error) {
-        throw mapWalletError(error);
+        throw await mapWalletError(error);
       }
     },
   };

@@ -254,17 +254,6 @@ describe('submitCreateVoteRequest', () => {
     );
   });
 
-  test('maps structured signature_rejected code to SignatureRejectedError', async () => {
-    const fakes = buildFakes();
-    fakes.prepareExecuteAndWait.mockRejectedValue(
-      Object.assign(new Error('signature rejected by user'), { code: 'signature_rejected' })
-    );
-
-    await expect(
-      buildSubmission(fakes).submitCreateVoteRequest(requestArgs)
-    ).rejects.toBeInstanceOf(SignatureRejectedError);
-  });
-
   test('does not map on-ledger rejection messages to SignatureRejectedError', async () => {
     const fakes = buildFakes();
     const ledgerError = new Error('the transaction was rejected by the mediator');
