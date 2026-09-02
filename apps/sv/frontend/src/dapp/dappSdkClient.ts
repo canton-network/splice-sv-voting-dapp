@@ -57,6 +57,13 @@ const createClient = (cip103RpcUrl: string): DappSdkClient => {
     return sdkPromise;
   };
 
+  const requireSdk = (): Promise<DappSDK> => {
+    if (!sdkPromise) {
+      throw new Error('CIP-103 SDK is not loaded');
+    }
+    return sdkPromise;
+  };
+
   return {
     cip103RpcUrl,
     async init(): Promise<void> {
@@ -66,10 +73,7 @@ const createClient = (cip103RpcUrl: string): DappSdkClient => {
       return (await getSdk()).connect();
     },
     async disconnect(): Promise<void> {
-      if (!sdkPromise) {
-        return;
-      }
-      await (await getSdk()).disconnect();
+      await (await requireSdk()).disconnect();
     },
     async isConnected(): Promise<ConnectResult> {
       return (await getSdk()).isConnected();
@@ -83,10 +87,7 @@ const createClient = (cip103RpcUrl: string): DappSdkClient => {
     async removeOnAccountsChanged(
       listener: (accounts: AccountsChangedEvent) => void
     ): Promise<void> {
-      if (!sdkPromise) {
-        return;
-      }
-      (await getSdk()).removeOnAccountsChanged(listener);
+      (await requireSdk()).removeOnAccountsChanged(listener);
     },
     async prepareExecuteAndWait(
       params: PrepareExecuteParams
