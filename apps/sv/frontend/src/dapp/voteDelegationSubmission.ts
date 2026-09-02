@@ -66,10 +66,12 @@ interface ScanContract {
   payload: unknown;
 }
 
-const toDisclosure = (contract: ScanContract): DisclosedContractInput | undefined => {
-  const blob = contract.created_event_blob?.trim();
+const toDisclosure = (contract: ScanContract): DisclosedContractInput => {
+  const blob = contract.created_event_blob;
   if (!blob) {
-    return undefined;
+    throw new VoteDelegationContextError(
+      `Scan returned ${contract.contract_id} without a created event blob — cannot disclose it.`
+    );
   }
   return {
     contractId: contract.contract_id,
@@ -88,7 +90,7 @@ interface VoteDelegationContext {
    * disclose DsoRules explicitly; without it, prepare fails with
    * PERMISSION_DENIED ("A security-sensitive error has been received").
    */
-  readonly dsoRulesDisclosed?: DisclosedContractInput;
+  readonly dsoRulesDisclosed: DisclosedContractInput;
 }
 
 export interface VoteDelegationSubmissionDeps {
@@ -156,13 +158,12 @@ export function createVoteDelegationSubmission(
       );
     }
 
-    const dsoRulesDisclosed = toDisclosure(dsoRulesContract);
     return {
       voterPartyId,
       svPartyId,
       voteDelegationCid,
       dsoRulesCid,
-      ...(dsoRulesDisclosed !== undefined ? { dsoRulesDisclosed } : {}),
+      dsoRulesDisclosed: toDisclosure(dsoRulesContract),
     };
   };
 
@@ -179,7 +180,7 @@ export function createVoteDelegationSubmission(
    */
   const resolveCurrentVoteRequest = async (
     routeId: string
-  ): Promise<{ contractId: string; disclosed?: DisclosedContractInput }> => {
+  ): Promise<{ contractId: string; disclosed: DisclosedContractInput }> => {
     let contract: ScanContract | undefined;
     try {
       const response = await scanClient.lookupDsoRulesVoteRequest(routeId);
@@ -205,10 +206,9 @@ export function createVoteDelegationSubmission(
       );
     }
 
-    const disclosed = toDisclosure(contract);
     return {
       contractId: contract.contract_id,
-      ...(disclosed !== undefined ? { disclosed } : {}),
+      disclosed: toDisclosure(contract),
     };
   };
 
@@ -222,11 +222,6 @@ export function createVoteDelegationSubmission(
       const context = await resolveContext('vote');
       const voteRequest = await resolveCurrentVoteRequest(voteRequestContractId);
 
-      const disclosedContracts = [
-        ...(context.dsoRulesDisclosed !== undefined ? [context.dsoRulesDisclosed] : []),
-        ...(voteRequest.disclosed !== undefined ? [voteRequest.disclosed] : []),
-      ];
-
       const params = buildVoteDelegationCastParams({
         voteRequestContractId: voteRequest.contractId,
         accepted: isAccepted,
@@ -236,7 +231,7 @@ export function createVoteDelegationSubmission(
         dsoRulesCid: context.dsoRulesCid,
         svPartyId: context.svPartyId,
         voterPartyId: context.voterPartyId,
-        ...(disclosedContracts.length > 0 ? { disclosedContracts } : {}),
+        disclosedContracts: [context.dsoRulesDisclosed, voteRequest.disclosed],
       });
 
       try {
@@ -266,9 +261,7 @@ export function createVoteDelegationSubmission(
         dsoRulesCid: context.dsoRulesCid,
         svPartyId: context.svPartyId,
         voterPartyId: context.voterPartyId,
-        ...(context.dsoRulesDisclosed !== undefined
-          ? { disclosedContracts: [context.dsoRulesDisclosed] }
-          : {}),
+        disclosedContracts: [context.dsoRulesDisclosed],
       });
 
       try {
