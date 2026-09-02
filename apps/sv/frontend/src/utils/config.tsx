@@ -20,11 +20,10 @@ type SvServicesConfig = {
 // When enabled, the SV app runs backend-less: login goes through a CIP-103
 // RPC endpoint, governance reads come from Scan, and vote submissions are
 // exercised on a VoteDelegation contract through the dApp API.
-// Docker envsubst emits "true"/"false" strings; accept those plus booleans.
 const alreadyTrimmed = (value: string): boolean => value === value.trim();
 
 const dappModeEnabledSchema = z.object({
-  enabled: z.union([z.literal(true), z.literal('true')]).transform(() => true as const),
+  enabled: z.literal(true),
   // Scan API base URL, e.g. http://scan.localhost:4000/api/scan
   scanUrl: z.string().min(1).refine(alreadyTrimmed, {
     message: 'must not have leading or trailing whitespace',
@@ -37,7 +36,7 @@ const dappModeEnabledSchema = z.object({
 
 const dappModeDisabledSchema = z.object({
   enabled: z
-    .union([z.literal(false), z.literal('false')])
+    .literal(false)
     .optional()
     .transform(() => false as const),
   scanUrl: z.string().optional(),

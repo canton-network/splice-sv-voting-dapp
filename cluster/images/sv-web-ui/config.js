@@ -25,7 +25,7 @@ window.splice_config = {
   // exercised on a VoteDelegation contract through the dApp API.
   // SPLICE_APP_UI_DAPP_MODE_ENABLED defaults to false when unset.
   dappMode: {
-    enabled: "${SPLICE_APP_UI_DAPP_MODE_ENABLED}",
+    enabled: ${SPLICE_APP_UI_DAPP_MODE_ENABLED},
     scanUrl: "${SPLICE_APP_UI_DAPP_MODE_SCAN_URL}",
     cip103RpcUrl: "${SPLICE_APP_UI_DAPP_MODE_CIP103_RPC_URL}",
   },

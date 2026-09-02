@@ -9,8 +9,11 @@ http=${SPLICE_APP_UI_HTTP_URL:-false}
 
 echo "Generating config.js file..."
 
-# envsubst leaves unset vars empty; default so config.js gets "false", not "".
-export SPLICE_APP_UI_DAPP_MODE_ENABLED="${SPLICE_APP_UI_DAPP_MODE_ENABLED:-false}"
+# Substituted unquoted, so it has to be a valid JS boolean literal.
+case "${SPLICE_APP_UI_DAPP_MODE_ENABLED:-false}" in
+  true | 1) export SPLICE_APP_UI_DAPP_MODE_ENABLED=true ;;
+  *) export SPLICE_APP_UI_DAPP_MODE_ENABLED=false ;;
+esac
 
 if [ "$http" == "true" ] || [ "$http" == "1" ]; then
   echo "WARNING: Using an http url"
