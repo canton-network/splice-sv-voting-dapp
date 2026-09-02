@@ -408,7 +408,10 @@ class SvDappModeFrontendIntegrationTest
         }
 
         // Lit / dapp-sdk console warnings are expected once the SDK chunk loads.
-        loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+        loggerFactory.assertLogsSeq(
+          SuppressionRule.LevelAndAbove(Level.WARN) &&
+            SuppressionRule.LoggerNameContains("web-frontend")
+        )(
           {
             withFrontEnd("sv-dapp") { implicit webDriver =>
               actAndCheck(
