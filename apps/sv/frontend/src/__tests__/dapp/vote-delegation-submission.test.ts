@@ -128,11 +128,8 @@ describe('submitCastVote', () => {
     ]);
   });
 
-  test('re-resolves a stale id to the current VoteRequest contract', async () => {
+  test('re-resolves the tracking cid to the current VoteRequest contract', async () => {
     const fakes = buildFakes();
-    fakes.lookupDsoRulesVoteRequest.mockRejectedValue(
-      Object.assign(new Error('VoteRequest contract not found.'), { code: 404 })
-    );
 
     await buildSubmission(fakes).submitCastVote({
       ...castArgs,
@@ -140,7 +137,7 @@ describe('submitCastVote', () => {
       voteRequestContractId: '00trackingcid',
     });
 
-    expect(fakes.listDsoRulesVoteRequests).toHaveBeenCalled();
+    expect(fakes.lookupDsoRulesVoteRequest).toHaveBeenCalledWith('00trackingcid');
     const params = fakes.prepareExecuteAndWait.mock.calls[0][0];
     expect(params.commands[0].ExerciseCommand.choiceArgument.castVote.requestCid).toBe(
       '00currentvoterequest'
@@ -152,11 +149,11 @@ describe('submitCastVote', () => {
     fakes.lookupDsoRulesVoteRequest.mockRejectedValue(
       Object.assign(new Error('VoteRequest contract not found.'), { code: 404 })
     );
-    fakes.listDsoRulesVoteRequests.mockResolvedValue({ dso_rules_vote_requests: [] });
 
     await expect(buildSubmission(fakes).submitCastVote(castArgs)).rejects.toBeInstanceOf(
       VoteDelegationContextError
     );
+    expect(fakes.listDsoRulesVoteRequests).not.toHaveBeenCalled();
     expect(fakes.prepareExecuteAndWait).not.toHaveBeenCalled();
   });
 

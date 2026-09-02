@@ -168,15 +168,14 @@ export function createVoteDelegationSubmission(
   };
 
   /**
-   * Resolves the id held by the UI (tracking cid or contract id) to the
-   * *current* VoteRequest contract. DsoRules_CastVote archives and recreates
-   * the VoteRequest on every vote, so stale ids fail with CONTRACT_NOT_FOUND.
+   * Resolves the id held by the UI to the *current* VoteRequest contract.
+   * DsoRules_CastVote archives and recreates the VoteRequest on every vote, so
+   * stale ids fail with CONTRACT_NOT_FOUND.
    *
-   * Scan's lookup is ACS-backed and indexes by tracking cid
-   * (`vote_request_tracking_cid`), so a tracking-cid lookup already returns
-   * the live contract. A 404 falls through to listing active requests (covers
-   * stale intermediate contract ids). Non-404 Scan failures are rethrown so a
-   * 500/network blip is not mistaken for "not found".
+   * The UI always holds `trackingCid || contractId`, which is what Scan indexes
+   * as `vote_request_tracking_cid`, so this lookup returns the live contract for
+   * any open request. Non-404 Scan failures are rethrown so a 500/network blip
+   * is not mistaken for "not found".
    */
   const resolveCurrentVoteRequest = async (
     routeId: string
@@ -189,15 +188,6 @@ export function createVoteDelegationSubmission(
       if (!isScanNotFound(error)) {
         throw error;
       }
-      contract = undefined;
-    }
-
-    if (!contract) {
-      const known = await scanClient.listDsoRulesVoteRequests();
-      contract = (known.dso_rules_vote_requests as ScanContract[]).find(vr => {
-        const trackingCid = (vr.payload as { trackingCid?: string | null })?.trackingCid;
-        return vr.contract_id === routeId || trackingCid === routeId;
-      });
     }
 
     if (!contract) {
