@@ -45,6 +45,9 @@ class SvDappModeFrontendIntegrationTest
   private val dsoGovernanceDarPath =
     s"daml/dars/splice-dso-governance-${InitialPackageVersions.initialPackageVersion(DarResources.dsoGovernance)}.dar"
 
+  private val walletGatewayWindowTimeout = 30.seconds
+  private val walletGatewayPopupTimeout = 45.seconds
+
   override def environmentDefinition: EnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology4Svs(this.getClass.getSimpleName)
@@ -216,9 +219,10 @@ class SvDappModeFrontendIntegrationTest
         shadowExists(selector)
       }
 
-  private def waitForWindowClose(handle: String, timeout: FiniteDuration = 30.seconds)(implicit
-      webDriver: WebDriver
-  ): Unit =
+  private def waitForWindowClose(
+      handle: String,
+      timeout: FiniteDuration = walletGatewayWindowTimeout,
+  )(implicit webDriver: WebDriver): Unit =
     eventually(timeUntilSuccess = timeout) {
       webDriver.getWindowHandles.asScala.contains(handle) shouldBe false
     }
@@ -230,12 +234,12 @@ class SvDappModeFrontendIntegrationTest
 
     eventuallyClickOn(testId("connect-wallet-button"))
 
-    eventually(timeUntilSuccess = 30.seconds) {
+    eventually(timeUntilSuccess = walletGatewayWindowTimeout) {
       webDriver.getWindowHandles.size should be > handlesBefore.size
     }
 
     clue("select CIP-103 RPC in shadowed wallet picker") {
-      eventually(timeUntilSuccess = 20.seconds) {
+      eventually() {
         switchToWindowWithShadow(
           """[aria-label="Connect to CIP-103 RPC"], .wallet-card, .custom-url-input""",
           mainWindow,
@@ -253,17 +257,17 @@ class SvDappModeFrontendIntegrationTest
     }
 
     clue("complete wallet gateway self-signed login") {
-      val loginWindow = eventually(timeUntilSuccess = 45.seconds) {
+      val loginWindow = eventually(timeUntilSuccess = walletGatewayPopupTimeout) {
         val handle = switchToWindowWithShadow("#network-select", mainWindow)
         handle.nonEmpty shouldBe true
         handle.value
       }
       switchToWindow(loginWindow)
       // Form auto-selects the first usable network; force the IT network by label.
-      eventually(timeUntilSuccess = 20.seconds) {
+      eventually() {
         shadowSelectByVisibleText("#network-select", walletGatewayNetworkName) shouldBe true
       }
-      eventually(timeUntilSuccess = 45.seconds) {
+      eventually(timeUntilSuccess = walletGatewayPopupTimeout) {
         switchToWindow(loginWindow)
         if (webDriver.getCurrentUrl.contains("/login")) {
           shadowSelectByVisibleText("#network-select", walletGatewayNetworkName)
@@ -303,7 +307,7 @@ class SvDappModeFrontendIntegrationTest
 
   private def approveGatewayTransaction()(implicit webDriver: WebDriver): Unit = {
     val mainWindow = webDriver.getWindowHandle
-    val approveWindow = eventually(timeUntilSuccess = 45.seconds) {
+    val approveWindow = eventually(timeUntilSuccess = walletGatewayPopupTimeout) {
       val handle = webDriver.getWindowHandles.asScala
         .filterNot(_ == mainWindow)
         .find { h =>
@@ -314,7 +318,7 @@ class SvDappModeFrontendIntegrationTest
       handle.value
     }
     switchToWindow(approveWindow)
-    eventually(timeUntilSuccess = 20.seconds) {
+    eventually() {
       shadowClickButtonNamed("Approve") shouldBe true
     }
     waitForWindowClose(approveWindow)
@@ -336,7 +340,7 @@ class SvDappModeFrontendIntegrationTest
       webDriver: WebDriver
   ): Unit = {
     go to s"http://localhost:$svDappUIPort/governance"
-    eventually(timeUntilSuccess = 30.seconds) {
+    eventually(timeUntilSuccess = walletGatewayWindowTimeout) {
       find(id("initiate-proposal-button")) should not be empty
     }
     click on id("initiate-proposal-button")
@@ -463,7 +467,7 @@ class SvDappModeFrontendIntegrationTest
               actAndCheck(
                 "open proposal and update the create-time vote via wallet gateway", {
                   go to s"http://localhost:$svDappUIPort/governance/proposals/$proposalCid"
-                  eventually(timeUntilSuccess = 30.seconds) {
+                  eventually(timeUntilSuccess = walletGatewayWindowTimeout) {
                     (find(testId("your-vote-accept")).nonEmpty ||
                       find(testId("your-vote-edit-button")).nonEmpty) shouldBe true
                   }
