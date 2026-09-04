@@ -101,7 +101,7 @@ describe('discoverVoteDelegation', () => {
   });
 
   test('errors when an ACS entry has no active created event', async () => {
-    const client = buildClient([{ contractEntry: {} }]);
+    const client = buildClient([{ contractEntry: { JsEmpty: {} } }]);
     await expect(
       discoverVoteDelegation({
         sdkClient: client,
