@@ -33,7 +33,7 @@ import scala.jdk.OptionConverters.*
   * prepareExecuteAndWait, and approves the gateway popups. On-ledger
   * attribution remains the delegating SV.
   */
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_29
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_30
 class SvDappModeFrontendIntegrationTest
     extends FrontendIntegrationTest("sv-dapp")
     with WalletTestUtil
